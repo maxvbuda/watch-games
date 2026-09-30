@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Box Push</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #ctrl { position: absolute; left: 0; right: 0; bottom: max(4px, env(safe-area-inset-bottom)); display: flex; justify-content: center; gap: 6px; z-index: 5; }
+    #ctrl button { border: 0; border-radius: 12px; background: #2c2c2eee; color: #fff; font: inherit; font-size: 12px; font-weight: 700; padding: 5px 12px; }
+  </style>
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div id="ctrl"><button id="undo">↶ Undo</button><button id="restart">⟲ Restart</button></div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+
+    // # wall, . goal, $ box, @ player, * box on goal, + player on goal
+    const LEVELS = [
+      ['#####', '#@  #', '# $ #', '# . #', '#####'],
+      ['######', '#    #', '# $$ #', '#@.. #', '######'],
+      ['#######', '#     #', '# #$# #', '# . @ #', '#######'],
+      ['#######', '#.  $ #', '#  #  #', '#@ $ .#', '#######'],
+      ['########', '#  .   #', '# $##$ #', '#   @ .#', '########'],
+      ['#######', '#.@ # #', '#$*   #', '# $ $ #', '# ..  #', '#  *  #', '#######'],
+    ];
+    let level = 0, walls, goals, boxes, player, history, moves, won;
+
+    function load(i) {
+      level = i;
+      const L = LEVELS[i];
+      walls = new Set(); goals = new Set(); boxes = new Set();
+      L.forEach((row, y) => [...row].forEach((ch, x) => {
+        const k = x + ',' + y;
+        if (ch === '#') walls.add(k);
+        if ('.*+'.includes(ch)) goals.add(k);
+        if ('$*'.includes(ch)) boxes.add(k);
+        if ('@+'.includes(ch)) player = [x, y];
+      }));
+      history = []; moves = 0; won = false;
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `L${level + 1}<small>${moves} moves</small>`; }
+
+    const D = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+    function move(d) {
+      if (won) return;
+      const [dx, dy] = D[d];
+      const nx = player[0] + dx, ny = player[1] + dy, nk = nx + ',' + ny;
+      if (walls.has(nk)) return;
+      if (boxes.has(nk)) {
+        const bk = (nx + dx) + ',' + (ny + dy);
+        if (walls.has(bk) || boxes.has(bk)) return;
+        history.push({ player: [...player], boxes: new Set(boxes) });
+        boxes.delete(nk); boxes.add(bk);
+      } else history.push({ player: [...player], boxes: new Set(boxes) });
+      player = [nx, ny];
+      moves++;
+      updateHud();
+      if ([...boxes].every(b => goals.has(b))) {
+        won = true;
+        W.best('sokoban', level + 1);
+        const lastLevel = level === LEVELS.length - 1;
+        setTimeout(() => W.overlay({
+          title: lastLevel ? 'All levels done! 🏆' : `Level ${level + 1} solved!`,
+          big: moves + ' moves',
+          button: lastLevel ? 'Play again' : 'Next level',
+          onStart: () => load(lastLevel ? 0 : level + 1),
+        }), 300);
+      }
+    }
+
+    document.getElementById('undo').addEventListener('click', () => {
+      const h = history.pop();
+      if (!h || won) return;
+      player = h.player; boxes = h.boxes; moves++;
+      updateHud();
+    });
+    document.getElementById('restart').addEventListener('click', () => load(level));
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      const L = LEVELS[level];
+      const cols = Math.max(...L.map(r => r.length)), rows = L.length;
+      const cs = Math.floor(Math.min((w - 8) / cols, (h - 64) / rows));
+      const ox = Math.floor((w - cs * cols) / 2), oy = Math.floor(32 + (h - 64 - cs * rows) / 2);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+        const k = x + ',' + y, X = ox + x * cs, Y = oy + y * cs;
+        if (walls.has(k)) { ctx.fillStyle = '#8e5a3c'; ctx.fillRect(X, Y, cs, cs); ctx.fillStyle = '#6b422a'; ctx.fillRect(X, Y + cs / 2 - 0.5, cs, 1); ctx.fillRect(X + cs / 2 - 0.5, Y, 1, cs / 2); continue; }
+        if (L[y][x] === undefined || L[y][x] === ' ' && !isInside(x, y)) continue;
+        ctx.fillStyle = '#2c2c2e'; ctx.fillRect(X, Y, cs, cs);
+        if (goals.has(k)) { ctx.fillStyle = '#ff453a'; ctx.beginPath(); ctx.arc(X + cs / 2, Y + cs / 2, cs * 0.15, 0, Math.PI * 2); ctx.fill(); }
+      }
+      ctx.font = `${Math.round(cs * 0.8)}px sans-serif`;
+      ctx.fillStyle = '#000';
+      for (const b of boxes) {
+        const [x, y] = b.split(',').map(Number);
+        ctx.fillText('📦', ox + (x + 0.5) * cs, oy + (y + 0.55) * cs);
+        if (goals.has(b)) { ctx.strokeStyle = '#30d158'; ctx.lineWidth = 2; ctx.strokeRect(ox + x * cs + 2, oy + y * cs + 2, cs - 4, cs - 4); }
+      }
+      ctx.fillText('🧑', ox + (player[0] + 0.5) * cs, oy + (player[1] + 0.55) * cs);
+    }
+    // Floor inside the level (between walls on its row).
+    function isInside(x, y) { const r = LEVELS[level][y]; return x > r.indexOf('#') && x < r.lastIndexOf('#'); }
+
+    W.swipe(canvas, move);
+    load(0);
+    W.overlay({ title: '📦 Box Push', text: 'Swipe to walk. Push every<br>📦 onto a red dot.<br>You can\'t pull!', onStart() {} });
+    W.loop(render);
+  </script>
+</body>
+</html>
