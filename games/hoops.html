@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Hoops</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const TIME = 45;
+
+    let hoop, shot, score, streak, timeLeft, state = 'ready', msg = null, msgT = 0, hoopDir = 1;
+    const BY = () => view.h * 0.84, HY = () => view.h * 0.3, RIM = () => view.w * 0.24, BS = () => view.w * 0.14;
+
+    function reset() { hoop = { x: view.w / 2 }; shot = null; score = 0; streak = 0; timeLeft = TIME; updateHud(); }
+    function updateHud() { hud.innerHTML = `${score}<small>${Math.ceil(timeLeft)}s</small>`; }
+
+    // Flick: swipe length sets distance, sideways movement sets aim.
+    function flick(dx, dy) {
+      if (state !== 'play' || shot || dy > -15) return;
+      const power = -dy / (view.h * 0.32);
+      const landY = BY() - power * (BY() - HY());
+      shot = { t: 0, x0: view.w / 2, landX: view.w / 2 + dx * 1.3, landY, dur: 0.75 };
+    }
+
+    function resolve() {
+      const dx = Math.abs(shot.landX - hoop.x), dyErr = Math.abs(shot.landY - HY());
+      const rim = RIM() / 2;
+      if (dx < rim * 0.55 && dyErr < view.h * 0.07) {
+        streak++;
+        const pts = streak >= 3 ? 3 : 2;
+        score += pts;
+        msg = dx < rim * 0.2 ? `SWISH +${pts}` : `+${pts}`;
+        if (streak >= 3) msg += ' 🔥';
+        timeLeft = Math.min(TIME, timeLeft + 1);
+      } else {
+        streak = 0;
+        msg = dx < rim * 1.1 && dyErr < view.h * 0.12 ? 'Rim out' : 'Miss';
+      }
+      msgT = 0.8;
+      updateHud();
+    }
+
+    function update(dt) {
+      timeLeft -= dt;
+      if (score >= 10) {
+        // Hoop starts sliding once you're warmed up.
+        hoop.x += hoopDir * view.w * Math.min(0.15 + score * 0.008, 0.45) * dt;
+        if (hoop.x < RIM() / 2 + 4 || hoop.x > view.w - RIM() / 2 - 4) hoopDir *= -1;
+      }
+      if (shot) {
+        shot.t += dt / shot.dur;
+        if (shot.t >= 1) { resolve(); shot = null; }
+      }
+      if (timeLeft <= 0) {
+        state = 'over';
+        timeLeft = 0;
+        updateHud();
+        const best = W.best('hoops', score);
+        W.overlay({ title: 'Buzzer! 📣', big: score, text: `Best ${best}`, button: 'Again', onStart: start });
+      }
+      updateHud();
+    }
+
+    function drawBall(x, y, s) {
+      ctx.fillStyle = '#ff8a1a';
+      ctx.beginPath(); ctx.arc(x, y, s / 2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#7a3a00'; ctx.lineWidth = Math.max(1, s * 0.05);
+      ctx.beginPath(); ctx.arc(x, y, s / 2, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - s / 2, y); ctx.lineTo(x + s / 2, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, y - s / 2); ctx.lineTo(x, y + s / 2); ctx.stroke();
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#1a1f3a'); g.addColorStop(0.55, '#262b4a'); g.addColorStop(0.56, '#8b5a2b'); g.addColorStop(1, '#6b4220');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+
+      const hy = HY(), rim = RIM();
+      // Backboard.
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(hoop.x - rim * 0.85, hy - rim * 1.05, rim * 1.7, rim * 0.95);
+      ctx.strokeStyle = '#ff453a'; ctx.lineWidth = 2;
+      ctx.strokeRect(hoop.x - rim * 0.3, hy - rim * 0.6, rim * 0.6, rim * 0.45);
+
+      const ballPos = shot ? {
+        x: shot.x0 + (shot.landX - shot.x0) * shot.t,
+        y: BY() + (shot.landY - BY()) * shot.t - Math.sin(Math.PI * shot.t) * h * 0.35,
+        s: BS() * (1 - 0.45 * shot.t),
+      } : null;
+      // Ball behind the rim on the way down, in front on the way up.
+      const behind = shot && shot.t > 0.6;
+      if (behind) drawBall(ballPos.x, ballPos.y, ballPos.s);
+
+      ctx.strokeStyle = '#ff6b00'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(hoop.x, hy, rim / 2, rim * 0.1, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#ffffffaa'; ctx.lineWidth = 1;
+      for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(hoop.x + i * rim * 0.2, hy + 2); ctx.lineTo(hoop.x + i * rim * 0.12, hy + rim * 0.45); ctx.stroke(); }
+
+      if (shot && !behind) drawBall(ballPos.x, ballPos.y, ballPos.s);
+      if (!shot && state === 'play') drawBall(w / 2, BY(), BS());
+      if (state === 'ready') drawBall(w / 2, BY(), BS());
+
+      if (msgT > 0) {
+        msgT -= dt;
+        ctx.globalAlpha = Math.min(1, msgT * 3);
+        ctx.fillStyle = msg.startsWith('+') || msg.startsWith('SWISH') ? '#ffd60a' : '#fff';
+        ctx.font = '800 16px -apple-system, system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(msg, w / 2, h * 0.62);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    let sx = 0, sy = 0;
+    W.pointer(canvas, {
+      down(p) { sx = p.x; sy = p.y; },
+      up(p) { flick(p.x - sx, p.y - sy); },
+    });
+    window.addEventListener('keydown', e => { if (e.key === ' ') flick((hoop.x - view.w / 2) / 1.3, -view.h * 0.32); });  // perfect shot, for testing
+
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🏀 Hoops', text: 'Flick up to shoot.<br>Harder = farther.<br>3 in a row = 🔥 bonus!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>

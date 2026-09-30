@@ -42,4 +42,5 @@ window.GAMES = [
   { id: 'jumper', name: 'Jumper', emoji: '🐸', color: '#30d158', desc: 'Bounce up — crown steers' },
   { id: 'stroop', name: 'Color Clash', emoji: '🌈', color: '#bf5af2', desc: 'Ink color, not the word' },
   { id: 'sudoku', name: 'Mini Sudoku', emoji: '🧠', color: '#64d2ff', desc: '6×6 number puzzle', unit: 's' },
+  { id: 'hoops', name: 'Hoops', emoji: '🏀', color: '#ff8a1a', desc: 'Flick to sink shots' },
 ];
