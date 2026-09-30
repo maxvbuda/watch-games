@@ -1,6 +1,7 @@
 // Registry of games shown on the hub. Add a line here when adding a game.
 window.GAMES = [
   { id: 'snakeio', name: 'Snake.io', emoji: '🐍', color: '#30d158', desc: 'Eat, grow, cut them off' },
+  { id: 'buggy', name: 'Beach Buggy', emoji: '🏖️', color: '#ff9f0a', desc: 'Kart racing with ❓ power-ups — Crown steers' },
   { id: 'flappy', name: 'Flappy Dot', emoji: '🐤', color: '#ffd60a', desc: 'Tap to fly through gaps' },
   { id: '2048', name: '2048', emoji: '🔢', color: '#ff9f0a', desc: 'Swipe to merge tiles' },
   { id: 'stack', name: 'Stack', emoji: '🧱', color: '#bf5af2', desc: 'Tap to build a tower' },
@@ -76,7 +77,6 @@ window.GAMES = [
   { id: 'five', name: 'Five', emoji: '🟩', color: '#30d158', desc: 'Guess the 5-letter word' },
   { id: 'pipes', name: 'Pipes', emoji: '🚰', color: '#64d2ff', desc: 'Rotate tiles to connect the water' },
   { id: 'penalty', name: 'Penalty Kick', emoji: '⚽️', color: '#2e8b3a', desc: 'Swipe to beat the keeper' },
-  { id: 'buggy', name: 'Beach Buggy', emoji: '🏖️', color: '#ff9f0a', desc: 'Kart racing with ❓ power-ups — Crown steers' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
