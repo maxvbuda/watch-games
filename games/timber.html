@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Lumberjack</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+
+    // Tree is a stack of segments; each may have a branch on the left (-1), right (1) or none (0).
+    let tree, side, energy, score, state = 'ready', chips = [], chopT = 0;
+    const SEG = () => view.h * 0.12;
+
+    function randBranch(prev) {
+      if (prev !== 0) return 0;   // never two in a row, so it's always escapable
+      const r = Math.random();
+      return r < 0.35 ? -1 : r < 0.7 ? 1 : 0;
+    }
+
+    function reset() {
+      tree = [0, 0];
+      while (tree.length < 12) tree.push(randBranch(tree[tree.length - 1]));
+      side = -1; energy = 1; score = 0;
+      hud.textContent = '0';
+    }
+
+    function chop(s) {
+      if (state !== 'play') return;
+      side = s;
+      // Branch coming down onto your side?
+      if (tree[1] === side) return die();
+      tree.shift();
+      tree.push(randBranch(tree[tree.length - 1]));
+      score++;
+      energy = Math.min(1, energy + 0.07);
+      hud.textContent = score;
+      chopT = 0.1;
+      for (let i = 0; i < 4; i++) chips.push({ x: view.w / 2 + side * 10, y: view.h * 0.8, vx: -side * W.rand(40, 120), vy: W.rand(-120, -40), t: 0.5 });
+      if (tree[0] === side) die();
+    }
+
+    function die() {
+      state = 'over';
+      const best = W.best('timber', score);
+      setTimeout(() => W.overlay({ title: energy <= 0 ? 'Too slow!' : 'Bonk! 🌲', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 500);
+    }
+
+    function update(dt) {
+      // Energy drains faster the more you chop.
+      energy -= dt * (0.18 + Math.min(score, 200) * 0.0025);
+      if (energy <= 0) { energy = 0; die(); }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#6ec6ff'); g.addColorStop(1, '#c6ecff');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#4caf50';
+      ctx.fillRect(0, h * 0.86, w, h);
+
+      const seg = SEG(), tw = w * 0.2, base = h * 0.86;
+      for (let i = 0; i < tree.length; i++) {
+        const y = base - (i + 1) * seg;
+        if (y < -seg) break;
+        ctx.fillStyle = i % 2 ? '#8b5a2b' : '#7a4e24';
+        ctx.fillRect(w / 2 - tw / 2, y, tw, seg);
+        if (tree[i]) {
+          ctx.fillStyle = '#6b4220';
+          const bx = tree[i] < 0 ? w / 2 - tw / 2 - w * 0.28 : w / 2 + tw / 2;
+          ctx.fillRect(bx, y + seg * 0.35, w * 0.28, seg * 0.3);
+          ctx.fillStyle = '#2e7d32';
+          ctx.beginPath(); ctx.arc(tree[i] < 0 ? bx + 6 : bx + w * 0.28 - 6, y + seg * 0.4, seg * 0.35, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      chopT = Math.max(0, chopT - dt);
+      ctx.save();
+      ctx.translate(w / 2 + side * (tw / 2 + w * 0.13), base - seg * 0.55);
+      if (side > 0) ctx.scale(-1, 1);
+      ctx.rotate(chopT * 3);
+      ctx.fillStyle = '#000';
+      ctx.font = `${Math.round(seg * 0.95)}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(state === 'over' ? '😵' : '🧔', 0, 0);
+      ctx.font = `${Math.round(seg * 0.6)}px sans-serif`;
+      ctx.fillText('🪓', seg * 0.45, -seg * 0.1);
+      ctx.restore();
+
+      for (const c of chips) {
+        c.t -= dt; c.vy += 400 * dt; c.x += c.vx * dt; c.y += c.vy * dt;
+        ctx.fillStyle = '#c48a50';
+        ctx.fillRect(c.x, c.y, 3, 3);
+      }
+      chips = chips.filter(c => c.t > 0);
+
+      // Energy bar.
+      ctx.fillStyle = '#0005';
+      ctx.fillRect(w * 0.25, 34, w * 0.5, 7);
+      ctx.fillStyle = energy < 0.3 ? '#ff453a' : '#ffd60a';
+      ctx.fillRect(w * 0.25 + 1, 35, (w * 0.5 - 2) * energy, 5);
+    }
+
+    W.pointer(canvas, { down: p => chop(p.x < view.w / 2 ? -1 : 1) });
+    window.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') chop(-1); if (e.key === 'ArrowRight') chop(1); });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🪓 Lumberjack', text: 'Tap left or right to chop.<br>Dodge the branches!<br>Keep chopping fast.', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
