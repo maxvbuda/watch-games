@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Lights Out</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 28px; }
+    #grid {
+      --size: min(96vw, calc(100vh - 34px));
+      width: var(--size); height: var(--size);
+      display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); gap: 4px;
+    }
+    .l { border-radius: 8px; background: #1c1c1e; transition: background 0.15s, box-shadow 0.15s; }
+    .l.on { background: #ffd60a; box-shadow: 0 0 10px #ffd60a88; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="grid"></div></div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const N = 5;
+    const gridEl = document.getElementById('grid');
+    const hud = document.getElementById('hud');
+    let lights, moves, level = 1, done;
+    const els = [];
+
+    for (let i = 0; i < N * N; i++) {
+      const d = document.createElement('div');
+      d.className = 'l';
+      d.addEventListener('click', () => press(i, true));
+      gridEl.appendChild(d);
+      els.push(d);
+    }
+
+    function toggle(i) {
+      const x = i % N, y = Math.floor(i / N);
+      for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < N && ny < N) lights[ny * N + nx] ^= 1;
+      }
+    }
+
+    function press(i, byPlayer) {
+      if (done) return;
+      toggle(i);
+      if (!byPlayer) return;
+      moves++;
+      draw();
+      if (!lights.includes(1)) {
+        done = true;
+        const best = W.best('lightsout', level);
+        setTimeout(() => W.overlay({ title: 'Lights out! 🌑', big: moves + ' moves', text: `Level ${level} cleared`, button: 'Next level', onStart: () => { level++; start(); } }), 400);
+      }
+    }
+
+    function draw() {
+      lights.forEach((v, i) => els[i].classList.toggle('on', !!v));
+      hud.innerHTML = `L${level}<small>${moves} moves</small>`;
+    }
+
+    function start() {
+      // Build the puzzle by pressing random squares, so it's always solvable.
+      lights = new Array(N * N).fill(0);
+      done = false;
+      const presses = Math.min(3 + level, 14);
+      while (!lights.includes(1)) for (let k = 0; k < presses; k++) toggle(W.randInt(0, N * N - 1));
+      moves = 0;
+      draw();
+    }
+
+    start();
+    W.overlay({ title: '💡 Lights Out', text: 'Tapping a light flips it<br>and its neighbours.<br>Turn them all off!', onStart() {} });
+  </script>
+</body>
+</html>

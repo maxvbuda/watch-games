@@ -24,4 +24,5 @@ window.GAMES = [
   { id: 'invaders', name: 'Invaders', emoji: '👾', color: '#bf5af2', desc: 'Defend against the swarm' },
   { id: 'fruit', name: 'Fruit Slice', emoji: '🍉', color: '#ff453a', desc: 'Swipe to slice, dodge bombs' },
   { id: 'connect4', name: 'Connect Four', emoji: '🔴', color: '#ffd60a', desc: 'Four in a row vs the watch' },
+  { id: 'lightsout', name: 'Lights Out', emoji: '💡', color: '#ffd60a', desc: 'Switch every light off' },
 ];
