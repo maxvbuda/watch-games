@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Air Hockey</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const TO_WIN = 5;
+
+    let me, cpu, puck, score, state = 'ready', pauseT = 0, target = null, streak = 0;
+    const MR = () => view.w * 0.1, PR = () => view.w * 0.065, GOAL = () => view.w * 0.42;
+    const TOP = 30, PAD = 4;
+
+    function place() {
+      me = { x: view.w / 2, y: view.h - view.h * 0.15, vx: 0, vy: 0 };
+      cpu = { x: view.w / 2, y: TOP + view.h * 0.12, vx: 0, vy: 0 };
+      target = null;
+    }
+    function servePuck(towardMe) {
+      puck = { x: view.w / 2, y: (TOP + view.h) / 2 + (towardMe ? -20 : 20), vx: 0, vy: 0 };
+      pauseT = 0.6;
+    }
+
+    function hitMallet(m) {
+      const dx = puck.x - m.x, dy = puck.y - m.y, d = Math.hypot(dx, dy), min = MR() + PR();
+      if (d >= min || d === 0) return;
+      const nx = dx / d, ny = dy / d;
+      puck.x = m.x + nx * min; puck.y = m.y + ny * min;
+      // Reflect relative velocity and add the mallet's push.
+      const rvx = puck.vx - m.vx, rvy = puck.vy - m.vy;
+      const dot = rvx * nx + rvy * ny;
+      if (dot < 0) { puck.vx -= 1.9 * dot * nx; puck.vy -= 1.9 * dot * ny; }
+      const max = view.h * 2.4, sp = Math.hypot(puck.vx, puck.vy);
+      if (sp > max) { puck.vx *= max / sp; puck.vy *= max / sp; }
+    }
+
+    function update(dt) {
+      // Your mallet chases your finger (bottom half only), tracking its velocity.
+      const r = MR(), mid = (TOP + view.h) / 2;
+      if (target) {
+        const nx = W.clamp(target.x, PAD + r, view.w - PAD - r), ny = W.clamp(target.y, mid + r, view.h - PAD - r);
+        me.vx = (nx - me.x) / dt; me.vy = (ny - me.y) / dt;
+        me.x = nx; me.y = ny;
+      } else { me.vx = 0; me.vy = 0; }
+
+      // CPU: defend its goal, strike when the puck is on its side.
+      const speed = view.w * (1.6 + score.me * 0.15);
+      let tx, ty;
+      if (puck.y < mid) { tx = puck.x; ty = puck.y - r * 0.6; }
+      else { tx = view.w / 2 + (puck.x - view.w / 2) * 0.5; ty = TOP + view.h * 0.1; }
+      const dx = tx - cpu.x, dy = ty - cpu.y, d = Math.hypot(dx, dy) || 1, step = Math.min(d, speed * dt);
+      cpu.vx = dx / d * step / dt; cpu.vy = dy / d * step / dt;
+      cpu.x = W.clamp(cpu.x + dx / d * step, PAD + r, view.w - PAD - r);
+      cpu.y = W.clamp(cpu.y + dy / d * step, TOP + PAD + r, mid - r);
+
+      if (pauseT > 0) { pauseT -= dt; return; }
+      const steps = 4;
+      for (let s = 0; s < steps; s++) {
+        const h = dt / steps, pr = PR();
+        puck.x += puck.vx * h; puck.y += puck.vy * h;
+        if (puck.x < PAD + pr) { puck.x = PAD + pr; puck.vx = Math.abs(puck.vx); }
+        if (puck.x > view.w - PAD - pr) { puck.x = view.w - PAD - pr; puck.vx = -Math.abs(puck.vx); }
+        const inGoal = Math.abs(puck.x - view.w / 2) < GOAL() / 2;
+        if (puck.y < TOP + PAD + pr && !inGoal) { puck.y = TOP + PAD + pr; puck.vy = Math.abs(puck.vy); }
+        if (puck.y > view.h - PAD - pr && !inGoal) { puck.y = view.h - PAD - pr; puck.vy = -Math.abs(puck.vy); }
+        hitMallet(me); hitMallet(cpu);
+      }
+      puck.vx *= Math.pow(0.8, dt); puck.vy *= Math.pow(0.8, dt);
+      if (puck.y < TOP - PR()) goal('me');
+      if (puck.y > view.h + PR()) goal('cpu');
+    }
+
+    function goal(who) {
+      score[who]++;
+      if (score.me >= TO_WIN || score.cpu >= TO_WIN) {
+        state = 'over';
+        const won = score.me > score.cpu;
+        streak = won ? streak + 1 : 0;
+        const best = W.best('airhockey', streak);
+        W.overlay({ title: won ? 'You win! 🏒' : 'Watch wins', big: `${score.me}–${score.cpu}`, text: `Win streak ${streak} · best ${best}`, button: 'Again', onStart: start });
+      } else servePuck(who === 'cpu');
+    }
+
+    function mallet(m, c) {
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.arc(m.x, m.y, MR(), 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffffff55';
+      ctx.beginPath(); ctx.arc(m.x, m.y, MR() * 0.45, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#dff3ff';
+      ctx.fillRect(PAD, TOP + PAD, w - PAD * 2, h - TOP - PAD * 2);
+      const mid = (TOP + h) / 2;
+      ctx.strokeStyle = '#ff453a88'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(PAD, mid); ctx.lineTo(w - PAD, mid); ctx.stroke();
+      ctx.beginPath(); ctx.arc(w / 2, mid, w * 0.15, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#1c1c1e';
+      ctx.fillRect(w / 2 - GOAL() / 2, TOP, GOAL(), PAD + 2);
+      ctx.fillRect(w / 2 - GOAL() / 2, h - PAD - 2, GOAL(), PAD + 2);
+      ctx.fillStyle = '#0a84ff33';
+      ctx.font = `800 ${Math.round(h * 0.14)}px -apple-system, system-ui`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(score.cpu, w / 2, mid - h * 0.16);
+      ctx.fillText(score.me, w / 2, mid + h * 0.16);
+      mallet(cpu, '#ff453a');
+      mallet(me, '#30d158');
+      ctx.fillStyle = '#1c1c1e';
+      ctx.beginPath(); ctx.arc(puck.x, puck.y, PR(), 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '700 12px -apple-system, system-ui';
+      ctx.fillText(`First to ${TO_WIN}`, w / 2, TOP / 2 + 2);
+    }
+
+    W.pointer(canvas, { down: p => (target = p), move: p => (target = p), up: () => (target = null) });
+
+    function start() { score = { me: 0, cpu: 0 }; place(); servePuck(true); state = 'play'; }
+    score = { me: 0, cpu: 0 }; place(); servePuck(true);
+    W.overlay({ title: '🏒 Air Hockey', text: `Drag your green mallet.<br>First to ${TO_WIN} wins!`, onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(); });
+  </script>
+</body>
+</html>

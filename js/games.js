@@ -46,4 +46,5 @@ window.GAMES = [
   { id: 'plinko', name: 'Plinko', emoji: '🔻', color: '#ff375f', desc: 'Drop balls, chase 10×' },
   { id: 'racer', name: 'Racer', emoji: '🏎️', color: '#ff453a', desc: 'Crown steers through traffic' },
   { id: 'hangman', name: 'Word Guess', emoji: '⛄', color: '#64d2ff', desc: 'Guess the word, save the snowman' },
+  { id: 'airhockey', name: 'Air Hockey', emoji: '🏒', color: '#64d2ff', desc: 'First to 5 vs the watch' },
 ];
