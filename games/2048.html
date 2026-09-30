@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>2048</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 22px; }
+    #board {
+      --size: min(96vw, calc(100vh - 30px));
+      width: var(--size);
+      height: var(--size);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 3px;
+      padding: 3px;
+      border-radius: 10px;
+      background: #3a3a3c;
+    }
+    .cell {
+      border-radius: 6px;
+      background: #2c2c2e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: #fff;
+      font-size: calc(var(--size) / 9);
+    }
+    .cell.pop { animation: pop 0.15s ease-out; }
+    @keyframes pop { from { transform: scale(0.6); } to { transform: scale(1); } }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="board"></div></div>
+  <div class="hud" id="hud">0</div>
+  <script src="../js/common.js"></script>
+  <script>
+    const boardEl = document.getElementById('board');
+    const hud = document.getElementById('hud');
+    const COLORS = {
+      2: '#48484a', 4: '#636366', 8: '#ff9f0a', 16: '#ff7a0a', 32: '#ff453a', 64: '#ff2d55',
+      128: '#ffd60a', 256: '#e6c200', 512: '#30d158', 1024: '#0a84ff', 2048: '#bf5af2',
+    };
+    let grid, score, over, won;
+    const cells = [];
+    for (let i = 0; i < 16; i++) {
+      const d = document.createElement('div');
+      d.className = 'cell';
+      boardEl.appendChild(d);
+      cells.push(d);
+    }
+
+    function addTile() {
+      const empty = [];
+      grid.forEach((v, i) => { if (!v) empty.push(i); });
+      if (!empty.length) return -1;
+      const i = W.pick(empty);
+      grid[i] = Math.random() < 0.9 ? 2 : 4;
+      return i;
+    }
+
+    function draw(fresh = []) {
+      grid.forEach((v, i) => {
+        const c = cells[i];
+        c.textContent = v || '';
+        c.style.background = v ? (COLORS[v] || '#fff') : '';
+        c.style.color = v === 128 || v === 256 ? '#000' : '#fff';
+        c.style.fontSize = v >= 1000 ? 'calc(var(--size) / 13)' : v >= 100 ? 'calc(var(--size) / 10.5)' : '';
+        c.classList.remove('pop');
+        if (fresh.includes(i)) { void c.offsetWidth; c.classList.add('pop'); }
+      });
+      hud.textContent = score;
+    }
+
+    // Slide one row (array of 4) toward index 0. Returns [newRow, gained, mergedIdx].
+    function slide(row) {
+      const vals = row.filter(Boolean);
+      const out = [], merged = [];
+      let gained = 0;
+      for (let i = 0; i < vals.length; i++) {
+        if (vals[i] === vals[i + 1]) {
+          out.push(vals[i] * 2);
+          gained += vals[i] * 2;
+          merged.push(out.length - 1);
+          i++;
+        } else out.push(vals[i]);
+      }
+      while (out.length < 4) out.push(0);
+      return [out, gained, merged];
+    }
+
+    function lines(dir) {
+      // Index lists for each line, ordered in the direction tiles move toward.
+      const L = [];
+      for (let a = 0; a < 4; a++) {
+        const line = [];
+        for (let b = 0; b < 4; b++) {
+          if (dir === 'left') line.push(a * 4 + b);
+          if (dir === 'right') line.push(a * 4 + 3 - b);
+          if (dir === 'up') line.push(b * 4 + a);
+          if (dir === 'down') line.push((3 - b) * 4 + a);
+        }
+        L.push(line);
+      }
+      return L;
+    }
+
+    function canMove() {
+      for (let i = 0; i < 16; i++) {
+        if (!grid[i]) return true;
+        if (i % 4 < 3 && grid[i] === grid[i + 1]) return true;
+        if (i < 12 && grid[i] === grid[i + 4]) return true;
+      }
+      return false;
+    }
+
+    function move(dir) {
+      if (over) return;
+      let moved = false;
+      const fresh = [];
+      for (const line of lines(dir)) {
+        const [out, gained, merged] = slide(line.map(i => grid[i]));
+        line.forEach((idx, k) => {
+          if (grid[idx] !== out[k]) moved = true;
+          grid[idx] = out[k];
+        });
+        merged.forEach(k => fresh.push(line[k]));
+        score += gained;
+      }
+      if (!moved) return;
+      fresh.push(addTile());
+      draw(fresh);
+      if (!won && grid.includes(2048)) {
+        won = true;
+        W.overlay({ title: '🎉 2048!', big: score, text: 'You did it! Keep going?', button: 'Continue', onStart() {} });
+      } else if (!canMove()) {
+        over = true;
+        const best = W.best('2048', score);
+        setTimeout(() => W.overlay({ title: 'No moves', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 500);
+      }
+    }
+
+    function start() {
+      grid = new Array(16).fill(0);
+      score = 0;
+      over = false;
+      won = false;
+      const a = addTile(), b = addTile();
+      draw([a, b]);
+    }
+
+    W.swipe(document.getElementById('area'), move);
+    start();
+  </script>
+</body>
+</html>
