@@ -62,6 +62,6 @@ window.GAMES = [
   { id: 'asteroids', name: 'Asteroids', emoji: '🌑', color: '#8e8e93', desc: 'Crown aims, auto-fire' },
   { id: 'tunnel', name: 'Tunnel', emoji: '🕳️', color: '#bf5af2', desc: 'Crown spins you through gaps' },
   { id: 'mancala', name: 'Mancala', emoji: '🪨', color: '#8b5a2b', desc: 'Sow stones, capture, outscore' },
-  { id: 'flood', name: 'Flood It', emoji: '🌊', color: '#0a84ff', desc: 'Fill the board in 20 moves', unit: ' moves' },
+  { id: 'flood', name: 'Flood It', emoji: '🌊', color: '#0a84ff', desc: 'Fill the board in 22 moves', unit: ' moves' },
   { id: 'codebreaker', name: 'Code Breaker', emoji: '🔐', color: '#5e5ce6', desc: 'Crack the colour code', unit: ' tries' },
 ];
