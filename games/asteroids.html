@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Asteroids</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const TAU = Math.PI * 2;
+
+    let angle, rocks, bullets, sparks, score, lives, fireT, spawnT, elapsed, state = 'ready', hitT = 0;
+    const stars = Array.from({ length: 40 }, () => [Math.random(), Math.random(), Math.random()]);
+    const C = () => ({ x: view.w / 2, y: view.h / 2 + 8 });
+
+    function reset() {
+      angle = -Math.PI / 2; rocks = []; bullets = []; sparks = [];
+      score = 0; lives = 3; fireT = 0; spawnT = 0.5; elapsed = 0; hitT = 0;
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `${score}<small>${'♥'.repeat(lives)}</small>`; }
+
+    function spawnRock(x, y, size) {
+      const c = C();
+      if (x === undefined) {
+        const a = Math.random() * TAU, R = Math.hypot(view.w, view.h) / 2 + 20;
+        x = c.x + Math.cos(a) * R; y = c.y + Math.sin(a) * R;
+      }
+      // Aim roughly at the ship.
+      const to = Math.atan2(c.y - y, c.x - x) + W.rand(-0.35, 0.35);
+      const sp = view.w * W.rand(0.12, 0.22) * (1 + elapsed / 90) * (size === 1 ? 1.4 : 1);
+      rocks.push({ x, y, vx: Math.cos(to) * sp, vy: Math.sin(to) * sp, size, r: view.w * [0, 0.035, 0.06, 0.09][size], rot: 0, vr: W.rand(-2, 2),
+        pts: Array.from({ length: 9 }, () => W.rand(0.7, 1.1)) });
+    }
+
+    function update(dt) {
+      elapsed += dt;
+      const c = C();
+      fireT -= dt;
+      if (fireT <= 0) {
+        fireT = 0.28;
+        const sp = view.w * 1.4;
+        bullets.push({ x: c.x + Math.cos(angle) * 10, y: c.y + Math.sin(angle) * 10, vx: Math.cos(angle) * sp, vy: Math.sin(angle) * sp, t: 0.8 });
+      }
+      spawnT -= dt;
+      if (spawnT <= 0) { spawnRock(undefined, undefined, W.pick([2, 3, 3])); spawnT = Math.max(0.7, 2.2 - elapsed * 0.02); }
+
+      for (const b of bullets) { b.x += b.vx * dt; b.y += b.vy * dt; b.t -= dt; }
+      for (const r of rocks) { r.x += r.vx * dt; r.y += r.vy * dt; r.rot += r.vr * dt; }
+
+      for (const b of bullets) {
+        for (const r of rocks) {
+          if (r.dead || b.t <= 0) continue;
+          if (Math.hypot(b.x - r.x, b.y - r.y) < r.r) {
+            r.dead = true; b.t = 0;
+            score += [0, 30, 20, 10][r.size];
+            for (let i = 0; i < 8; i++) sparks.push({ x: r.x, y: r.y, vx: W.rand(-80, 80), vy: W.rand(-80, 80), t: 0.4 });
+            if (r.size > 1) for (let k = 0; k < 2; k++) spawnRock(r.x, r.y, r.size - 1);
+          }
+        }
+      }
+      hitT = Math.max(0, hitT - dt);
+      for (const r of rocks) {
+        if (!r.dead && Math.hypot(r.x - c.x, r.y - c.y) < r.r + 7) {
+          r.dead = true;
+          if (hitT <= 0) {
+            lives--; hitT = 1.5;
+            if (lives <= 0) {
+              state = 'over';
+              const best = W.best('asteroids', score);
+              setTimeout(() => W.overlay({ title: 'Destroyed!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 600);
+            }
+          }
+        }
+      }
+      rocks = rocks.filter(r => !r.dead && Math.hypot(r.x - c.x, r.y - c.y) < view.w * 1.5);
+      bullets = bullets.filter(b => b.t > 0);
+      updateHud();
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      for (const [x, y, s] of stars) { ctx.fillStyle = `rgba(255,255,255,${s * 0.6})`; ctx.fillRect(x * w, y * h, 1.2, 1.2); }
+      ctx.strokeStyle = '#e5e5ea'; ctx.lineWidth = 1.5;
+      for (const r of rocks) {
+        ctx.beginPath();
+        r.pts.forEach((p, i) => { const a = r.rot + (i / r.pts.length) * TAU; ctx[i ? 'lineTo' : 'moveTo'](r.x + Math.cos(a) * r.r * p, r.y + Math.sin(a) * r.r * p); });
+        ctx.closePath(); ctx.stroke();
+      }
+      ctx.fillStyle = '#64d2ff';
+      for (const b of bullets) ctx.fillRect(b.x - 1.5, b.y - 1.5, 3, 3);
+      const c = C();
+      if (state !== 'over' && (hitT <= 0 || Math.floor(hitT * 10) % 2)) {
+        ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(angle);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(-7, -7); ctx.lineTo(-3, 0); ctx.lineTo(-7, 7); ctx.closePath(); ctx.stroke();
+        ctx.restore();
+      }
+      for (const s of sparks) { s.t -= dt; s.x += s.vx * dt; s.y += s.vy * dt; ctx.fillStyle = `rgba(255,214,10,${Math.max(0, s.t * 2.5)})`; ctx.fillRect(s.x, s.y, 2, 2); }
+      sparks = sparks.filter(s => s.t > 0);
+    }
+
+    // Touch aims directly; the crown rotates.
+    const aimAt = p => { const c = C(); angle = Math.atan2(p.y - c.y, p.x - c.x); };
+    W.pointer(canvas, { down: aimAt, move: aimAt });
+    W.crown(d => { if (state === 'play') angle += d * 0.012; });
+    const keys = {};
+    window.addEventListener('keydown', e => (keys[e.key] = true));
+    window.addEventListener('keyup', e => (keys[e.key] = false));
+
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '☄️ Asteroids', text: 'Turn the Crown (or touch)<br>to aim. Auto-fire!<br>Big rocks split.', onStart: start });
+    W.loop(dt => {
+      if (keys.ArrowLeft) angle -= 3 * dt;
+      if (keys.ArrowRight) angle += 3 * dt;
+      if (state === 'play') update(dt);
+      render(dt);
+    });
+  </script>
+</body>
+</html>

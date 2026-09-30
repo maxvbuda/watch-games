@@ -59,4 +59,5 @@ window.GAMES = [
   { id: 'battleship', name: 'Battleship', emoji: '🚢', color: '#0f4c81', desc: 'Sink the watch’s fleet' },
   { id: 'nim', name: 'Nim', emoji: '🕯️', color: '#ff9f0a', desc: 'Take the last candle' },
   { id: 'timber', name: 'Lumberjack', emoji: '🪓', color: '#8b5a2b', desc: 'Chop fast, dodge branches' },
+  { id: 'asteroids', name: 'Asteroids', emoji: '🌑', color: '#8e8e93', desc: 'Crown aims, auto-fire' },
 ];
