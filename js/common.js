@@ -126,6 +126,25 @@
     if (o) o.classList.add('hidden');
   };
 
+  // Digital Crown input. The crown scrolls the page, so we make the page secretly
+  // scrollable and report each scroll delta (px; positive = crown turned down).
+  W.crown = function (cb) {
+    document.body.classList.add('crown');
+    const spacer = document.createElement('div');
+    spacer.id = 'crown-spacer';
+    document.body.prepend(spacer);
+    const MID = 100000;
+    let last = MID;
+    window.scrollTo(0, MID);
+    window.addEventListener('scroll', () => {
+      const y = window.scrollY;
+      const d = y - last;
+      last = y;
+      if (d) cb(d);
+      if (Math.abs(y - MID) > 60000) { window.scrollTo(0, MID); last = MID; }
+    }, { passive: true });
+  };
+
   W.rand = (a, b) => a + Math.random() * (b - a);
   W.randInt = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
   W.clamp = (v, a, b) => Math.max(a, Math.min(b, v));

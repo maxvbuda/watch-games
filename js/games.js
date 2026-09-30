@@ -17,4 +17,5 @@ window.GAMES = [
   { id: 'math', name: 'Math Blitz', emoji: '🧮', color: '#0a84ff', desc: 'Quick-fire arithmetic' },
   { id: 'tiles', name: 'Piano Tiles', emoji: '🎹', color: '#e5e5ea', desc: 'Tap the black tiles' },
   { id: 'blobio', name: 'Blob.io', emoji: '🟢', color: '#30d158', desc: 'Eat or be eaten' },
+  { id: 'dino', name: 'Dino Run', emoji: '🦖', color: '#34c759', desc: 'Tap to jump cacti' },
 ];

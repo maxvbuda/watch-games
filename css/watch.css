@@ -153,3 +153,10 @@ canvas.full {
 .btn:active { opacity: 0.7; }
 .btn.alt { background: #2c2c2e; color: var(--fg); }
 .hidden { display: none !important; }
+
+/* ---------- Digital Crown (see W.crown) ---------- */
+body.game.crown { position: static; overflow-y: scroll; scrollbar-width: none; }
+body.game.crown::-webkit-scrollbar { display: none; }
+body.crown canvas.full, body.crown .hud, body.crown .back, body.crown .overlay,
+body.crown #area, body.crown .fixed { position: fixed; }
+#crown-spacer { height: 200000px; width: 1px; pointer-events: none; }

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Dino Run</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+
+    let dino, obstacles, clouds, speed, dist, spawnT, state = 'ready';
+    const GROUND = () => view.h * 0.75;
+    const DS = () => view.h * 0.13;  // dino size
+
+    function reset() {
+      dino = { y: 0, vy: 0, onGround: true };
+      obstacles = [];
+      clouds = Array.from({ length: 3 }, (_, i) => ({ x: i * view.w * 0.45, y: W.rand(0.15, 0.4) * view.h }));
+      speed = view.w * 0.75;
+      dist = 0;
+      spawnT = 1;
+      hud.textContent = '0';
+    }
+
+    function jump() {
+      if (state === 'play' && dino.onGround) {
+        dino.vy = -view.h * 1.55;
+        dino.onGround = false;
+      }
+    }
+
+    function spawn() {
+      const bird = dist > 400 && Math.random() < 0.25;
+      if (bird) {
+        obstacles.push({ x: view.w + 20, kind: 'bird', y: GROUND() - DS() * W.pick([0.5, 1.6]), s: DS() * 0.8 });
+      } else {
+        const n = Math.random() < 0.3 ? 2 : 1;
+        for (let i = 0; i < n; i++) obstacles.push({ x: view.w + 20 + i * DS() * 0.6, kind: 'cactus', y: GROUND(), s: DS() * W.rand(0.8, 1.05) });
+      }
+    }
+
+    function update(dt) {
+      speed += view.w * 0.012 * dt;
+      dist += speed * dt / view.w * 10;
+      hud.textContent = Math.floor(dist);
+
+      dino.vy += view.h * 4.2 * dt;
+      dino.y += dino.vy * dt;
+      if (dino.y >= 0) { dino.y = 0; dino.vy = 0; dino.onGround = true; }
+
+      spawnT -= dt;
+      if (spawnT <= 0) {
+        spawn();
+        spawnT = W.rand(0.8, 1.6) * Math.max(0.55, 1 - dist / 3000);
+      }
+
+      const dx = view.w * 0.18, ds = DS();
+      const dTop = GROUND() + dino.y - ds * 0.85, dBot = GROUND() + dino.y - ds * 0.1;
+      for (const o of obstacles) {
+        o.x -= speed * dt * (o.kind === 'bird' ? 1.15 : 1);
+        const oTop = o.kind === 'bird' ? o.y - o.s * 0.35 : o.y - o.s * 0.85;
+        const oBot = o.kind === 'bird' ? o.y + o.s * 0.2 : o.y;
+        const hitX = Math.abs(o.x - dx) < (ds + o.s) * 0.3;
+        if (hitX && dBot > oTop && dTop < oBot) return die();
+      }
+      obstacles = obstacles.filter(o => o.x > -40);
+      for (const c of clouds) { c.x -= speed * 0.2 * dt; if (c.x < -40) { c.x = view.w + 20; c.y = W.rand(0.15, 0.4) * view.h; } }
+    }
+
+    function die() {
+      state = 'over';
+      const s = Math.floor(dist);
+      const best = W.best('dino', s);
+      setTimeout(() => W.overlay({ title: 'Ouch!', big: s, text: `Best ${best}`, button: 'Again', onStart: start }), 500);
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#3a3a3c';
+      ctx.font = `${Math.round(h * 0.08)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      for (const c of clouds) ctx.fillText('☁️', c.x, c.y);
+
+      const g = GROUND();
+      ctx.fillStyle = '#8e8e93';
+      ctx.fillRect(0, g, w, 2);
+      ctx.fillStyle = '#48484a';
+      for (let i = 0; i < 12; i++) ctx.fillRect(((i * 37 - dist * 3) % w + w) % w, g + 6 + (i % 3) * 5, 4, 1.5);
+
+      for (const o of obstacles) {
+        ctx.font = `${Math.round(o.s)}px sans-serif`;
+        if (o.kind === 'bird') { ctx.textBaseline = 'middle'; ctx.fillText('🦅', o.x, o.y); }
+        else { ctx.textBaseline = 'alphabetic'; ctx.fillText('🌵', o.x, o.y + o.s * 0.12); }
+      }
+
+      // Emoji dino faces left, so mirror it to run right.
+      const ds = DS();
+      ctx.save();
+      ctx.translate(w * 0.18, g + dino.y);
+      ctx.scale(-1, 1);
+      ctx.font = `${Math.round(ds)}px sans-serif`;
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('🦖', 0, ds * 0.1);
+      ctx.restore();
+    }
+
+    W.pointer(canvas, { down: jump });
+    window.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'ArrowUp') jump(); });
+
+    function start() { reset(); state = 'play'; }
+
+    reset();
+    W.overlay({ title: '🦖 Dino Run', text: 'Tap to jump.<br>Dodge cacti and birds!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(); });
+  </script>
+</body>
+</html>
