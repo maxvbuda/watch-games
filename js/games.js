@@ -71,13 +71,14 @@ window.GAMES = [
   { id: 'lander', name: 'Lunar Lander', emoji: '🌕', color: '#8e8e93', desc: 'Crown tilts, hold to thrust' },
   { id: 'artillery', name: 'Artillery', emoji: '💣', color: '#5b7f3a', desc: 'Crown aims — first to 3 hits' },
   { id: 'safe', name: 'Safe Cracker', emoji: '💰', color: '#6e6e73', desc: 'Spin the Crown to find the code' },
+  { id: 'nonogram', name: 'Nonogram', emoji: '🖼️', color: '#0a84ff', desc: 'Fill the grid from number clues' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
 window.CATEGORIES = {
   Arcade: ['snakeio', 'blobio', 'flappy', 'stack', 'dino', 'knife', 'colorswitch', 'invaders', 'fruit', 'dodge', 'cave', 'hop',
     'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery'],
-  Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker'],
+  Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps'],
   Sports: ['golf', 'hoops', 'bowling', 'darts'],
