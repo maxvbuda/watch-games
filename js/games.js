@@ -10,4 +10,5 @@ window.GAMES = [
   { id: 'pong', name: 'Pong', emoji: '🏓', color: '#64d2ff', desc: 'First to 7 vs the watch' },
   { id: 'breakout', name: 'Breakout', emoji: '🟪', color: '#5e5ce6', desc: 'Smash every brick' },
   { id: 'snake', name: 'Snake', emoji: '🍎', color: '#34c759', desc: 'Classic grid snake' },
+  { id: 'mines', name: 'Minesweeper', emoji: '💣', color: '#8e8e93', desc: 'Clear the field fast', unit: 's' },
 ];

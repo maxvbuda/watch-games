@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Minesweeper</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 30px; }
+    #grid {
+      display: grid;
+      gap: 2px;
+      width: min(96vw, calc((100vh - 38px) * var(--cols) / var(--rows)));
+      grid-template-columns: repeat(var(--cols), 1fr);
+    }
+    .c {
+      aspect-ratio: 1;
+      border-radius: 4px;
+      background: #3a3a3c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: min(4.2vw, 16px);
+      line-height: 1;
+    }
+    .c.open { background: #1c1c1e; }
+    .c.boom { background: #ff453a; }
+    #mode {
+      position: absolute;
+      top: max(4px, env(safe-area-inset-top));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 15;
+      height: 24px;
+      padding: 0 10px;
+      border-radius: 12px;
+      border: 0;
+      background: #2c2c2e;
+      color: #fff;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    #mode.flag { background: #ff9f0a; color: #000; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="grid"></div></div>
+  <button id="mode">⛏ Dig</button>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const COLS = 7, ROWS = 8, MINES = 9;
+    const NUM_COLORS = ['', '#64d2ff', '#30d158', '#ff453a', '#bf5af2', '#ff9f0a', '#5ac8fa', '#fff', '#8e8e93'];
+    const gridEl = document.getElementById('grid');
+    const modeBtn = document.getElementById('mode');
+    const hud = document.getElementById('hud');
+    gridEl.style.setProperty('--cols', COLS);
+    gridEl.style.setProperty('--rows', ROWS);
+
+    let cells, first, over, flagMode = false, startTime, timer;
+
+    const idx = (x, y) => y * COLS + x;
+    function neighbors(i) {
+      const x = i % COLS, y = Math.floor(i / COLS), out = [];
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if ((dx || dy) && nx >= 0 && ny >= 0 && nx < COLS && ny < ROWS) out.push(idx(nx, ny));
+      }
+      return out;
+    }
+
+    function plantMines(safe) {
+      // Keep the first tap and its neighbours clear so you always get an opening.
+      const banned = new Set([safe, ...neighbors(safe)]);
+      let placed = 0;
+      while (placed < MINES) {
+        const i = W.randInt(0, cells.length - 1);
+        if (cells[i].mine || banned.has(i)) continue;
+        cells[i].mine = true;
+        placed++;
+      }
+      cells.forEach((c, i) => (c.n = neighbors(i).filter(j => cells[j].mine).length));
+    }
+
+    function reveal(i) {
+      const c = cells[i];
+      if (c.open || c.flag) return;
+      c.open = true;
+      if (c.n === 0 && !c.mine) neighbors(i).forEach(reveal);
+    }
+
+    function tap(i) {
+      if (over) return;
+      const c = cells[i];
+      if (flagMode) {
+        if (!c.open) c.flag = !c.flag;
+        return draw();
+      }
+      if (c.flag) return;
+      if (first) {
+        first = false;
+        plantMines(i);
+        startTime = Date.now();
+        timer = setInterval(draw, 1000);
+      }
+      if (c.open && c.n) {
+        // Chord: tapping a satisfied number opens its other neighbours.
+        const ns = neighbors(i);
+        if (ns.filter(j => cells[j].flag).length === c.n) ns.forEach(j => { if (!cells[j].flag) { reveal(j); if (cells[j].mine) lose(j); } });
+      } else if (c.mine) {
+        return lose(i);
+      } else reveal(i);
+      if (!over && cells.every(c => c.open || c.mine)) win();
+      draw();
+    }
+
+    function lose(i) {
+      if (over) return;
+      over = true;
+      clearInterval(timer);
+      cells[i].boom = true;
+      cells.forEach(c => { if (c.mine) c.open = true; });
+      draw();
+      setTimeout(() => W.overlay({ title: '💥 Boom', text: 'Tap a safe square next time!', button: 'Again', onStart: start }), 900);
+    }
+
+    function win() {
+      over = true;
+      clearInterval(timer);
+      const secs = Math.round((Date.now() - startTime) / 1000);
+      const best = W.best('mines', secs, true);
+      draw();
+      setTimeout(() => W.overlay({ title: 'Cleared! 🚩', big: secs + 's', text: `Best ${best}s`, button: 'Again', onStart: start }), 500);
+    }
+
+    const els = [];
+    for (let i = 0; i < COLS * ROWS; i++) {
+      const d = document.createElement('div');
+      d.className = 'c';
+      d.addEventListener('click', () => tap(i));
+      gridEl.appendChild(d);
+      els.push(d);
+    }
+
+    function draw() {
+      cells.forEach((c, i) => {
+        const d = els[i];
+        d.className = 'c' + (c.open ? ' open' : '') + (c.boom ? ' boom' : '');
+        d.style.color = NUM_COLORS[c.n] || '';
+        d.textContent = c.open ? (c.mine ? '💣' : c.n || '') : c.flag ? '🚩' : '';
+      });
+      const flags = cells.filter(c => c.flag).length;
+      const secs = startTime && !first ? Math.round((Date.now() - startTime) / 1000) : 0;
+      hud.innerHTML = `<span style="font-size:12px">${MINES - flags}💣 ${secs}s</span>`;
+    }
+
+    modeBtn.addEventListener('click', () => {
+      flagMode = !flagMode;
+      modeBtn.textContent = flagMode ? '🚩 Flag' : '⛏ Dig';
+      modeBtn.classList.toggle('flag', flagMode);
+    });
+
+    function start() {
+      clearInterval(timer);
+      cells = Array.from({ length: COLS * ROWS }, () => ({ mine: false, open: false, flag: false, n: 0 }));
+      first = true;
+      over = false;
+      startTime = 0;
+      draw();
+    }
+
+    start();
+  </script>
+</body>
+</html>

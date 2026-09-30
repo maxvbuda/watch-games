@@ -27,7 +27,7 @@
       a.innerHTML =
         `<span class="ico" style="background:${g.color}33">${g.emoji}</span>` +
         `<span><div class="name">${g.name}</div><div class="desc">${g.desc}</div>` +
-        (best !== null ? `<div class="best">Best ${best}</div>` : '') +
+        (best !== null ? `<div class="best">Best ${best}${g.unit || ''}</div>` : '') +
         `</span>`;
       list.appendChild(a);
     }
