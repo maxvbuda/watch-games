@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Racer</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const LANES = 4;
+    const TRAFFIC = ['🚗', '🚕', '🚙', '🚓', '🚚', '🚐'];
+
+    let car, cars, coins, speed, dist, spawnT, coinT, bonus, state = 'ready', roadOff = 0, crash = 0;
+    const RW = () => view.w * 0.86, RX = () => (view.w - RW()) / 2, LW = () => RW() / LANES, CS = () => LW() * 0.8;
+
+    function reset() {
+      car = { x: view.w / 2, tx: view.w / 2 };
+      cars = []; coins = [];
+      speed = view.h * 0.9; dist = 0; bonus = 0;
+      spawnT = 0.6; coinT = 1.5;
+      updateHud();
+    }
+    const scoreNow = () => Math.floor(dist / 20) + bonus;
+    function updateHud() { hud.textContent = scoreNow(); }
+
+    const laneX = i => RX() + (i + 0.5) * LW();
+
+    function update(dt) {
+      speed += view.h * 0.03 * dt;
+      dist += speed * dt / view.h * 10;
+      roadOff = (roadOff + speed * dt) % 40;
+      car.x += (car.tx - car.x) * Math.min(1, dt * 12);
+
+      spawnT -= dt;
+      if (spawnT <= 0) {
+        // Always leave at least one lane open in each wave.
+        const free = W.randInt(0, LANES - 1);
+        const n = Math.random() < Math.min(0.6, dist / 400) ? 2 : 1;
+        const lanes = [...Array(LANES).keys()].filter(i => i !== free).sort(() => Math.random() - 0.5).slice(0, n);
+        for (const l of lanes) cars.push({ x: laneX(l), y: -CS(), v: W.rand(0.3, 0.55), e: W.pick(TRAFFIC) });
+        spawnT = W.rand(0.55, 1.0) * Math.max(0.55, 1 - dist / 800);
+      }
+      coinT -= dt;
+      if (coinT <= 0) { coins.push({ x: laneX(W.randInt(0, LANES - 1)), y: -10 }); coinT = W.rand(1.2, 2.5); }
+
+      const cs = CS(), carY = view.h - cs * 0.9;
+      for (const c of cars) c.y += speed * (1 - c.v) * dt;   // traffic is slower than you
+      for (const c of coins) c.y += speed * dt;
+      for (const c of cars) {
+        if (Math.abs(c.x - car.x) < cs * 0.62 && Math.abs(c.y - carY) < cs * 0.85) {
+          state = 'over';
+          crash = 1;
+          const s = scoreNow();
+          const best = W.best('racer', s);
+          setTimeout(() => W.overlay({ title: '💥 Crash!', big: s, text: `Best ${best}`, button: 'Again', onStart: start }), 700);
+          return;
+        }
+      }
+      for (const c of coins) if (!c.got && Math.abs(c.x - car.x) < cs * 0.6 && Math.abs(c.y - carY) < cs * 0.7) { c.got = true; bonus += 10; }
+      cars = cars.filter(c => c.y < view.h + cs);
+      coins = coins.filter(c => !c.got && c.y < view.h + 10);
+      updateHud();
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#2f7d32';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#3a3a3c';
+      ctx.fillRect(RX(), 0, RW(), h);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(RX() - 2, 0, 2, h);
+      ctx.fillRect(RX() + RW(), 0, 2, h);
+      ctx.fillStyle = '#ffffffaa';
+      for (let i = 1; i < LANES; i++) for (let y = -40 + roadOff; y < h; y += 40) ctx.fillRect(RX() + i * LW() - 1, y, 2, 18);
+
+      const cs = CS();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#000';
+      ctx.font = `${Math.round(cs * 0.55)}px sans-serif`;
+      for (const c of coins) ctx.fillText('🪙', c.x, c.y);
+      // Emoji cars face left; rotate so traffic faces down and you face up.
+      ctx.font = `${Math.round(cs)}px sans-serif`;
+      for (const c of cars) { ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(-Math.PI / 2); ctx.fillText(c.e, 0, 0); ctx.restore(); }
+      ctx.save();
+      ctx.translate(car.x, h - cs * 0.9);
+      ctx.rotate(Math.PI / 2);
+      ctx.fillText('🏎️', 0, 0);
+      ctx.restore();
+      if (crash > 0) {
+        crash -= dt;
+        ctx.font = `${Math.round(cs * 1.4)}px sans-serif`;
+        ctx.fillText('💥', car.x, h - cs * 1.1);
+      }
+    }
+
+    const clampX = x => W.clamp(x, RX() + CS() * 0.45, RX() + RW() - CS() * 0.45);
+    W.pointer(canvas, { down: p => (car.tx = clampX(p.x)), move: p => (car.tx = clampX(p.x)) });
+    W.crown(d => { if (state === 'play') car.tx = clampX(car.tx + d * 0.7); });
+    window.addEventListener('keydown', e => {
+      if (e.key === 'ArrowLeft') car.tx = clampX(car.tx - LW());
+      if (e.key === 'ArrowRight') car.tx = clampX(car.tx + LW());
+    });
+
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🏎️ Racer', text: 'Turn the Crown or drag<br>to steer. Grab 🪙,<br>dodge traffic!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>

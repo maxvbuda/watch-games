@@ -44,4 +44,5 @@ window.GAMES = [
   { id: 'sudoku', name: 'Mini Sudoku', emoji: '🧠', color: '#64d2ff', desc: '6×6 number puzzle', unit: 's' },
   { id: 'hoops', name: 'Hoops', emoji: '🏀', color: '#ff8a1a', desc: 'Flick to sink shots' },
   { id: 'plinko', name: 'Plinko', emoji: '🔻', color: '#ff375f', desc: 'Drop balls, chase 10×' },
+  { id: 'racer', name: 'Racer', emoji: '🏎️', color: '#ff453a', desc: 'Crown steers through traffic' },
 ];
