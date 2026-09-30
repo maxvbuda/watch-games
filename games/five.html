@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Five</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; padding: 26px 2px max(2px, env(safe-area-inset-bottom)); gap: 4px; }
+    #grid { display: grid; grid-template-rows: repeat(6, 1fr); gap: 2px; flex: 1; min-height: 0; aspect-ratio: 5 / 6; max-width: 100%; }
+    .gr { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
+    .t { border: 1.5px solid #3a3a3c; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; min-width: 0; }
+    .t.f { border-color: #636366; }
+    .t.g { background: #30d158; border-color: #30d158; color: #000; }
+    .t.y { background: #ffd60a; border-color: #ffd60a; color: #000; }
+    .t.x { background: #3a3a3c; border-color: #3a3a3c; }
+    #kb { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; width: 100%; }
+    #kb button { border: 0; border-radius: 4px; background: #636366; color: #fff; font: inherit; font-size: 11px; font-weight: 700; padding: 4px 0; }
+    #kb button.g { background: #30d158; color: #000; }
+    #kb button.y { background: #ffd60a; color: #000; }
+    #kb button.x { background: #2c2c2e; color: #636366; }
+    #row.shake { animation: shake 0.3s; }
+    @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="grid"></div><div id="kb"></div></div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const WORDS = ('APPLE BEACH BRAIN BREAD CHAIR CHESS CLOCK CLOUD CRANE DANCE DREAM EAGLE EARTH FEAST FIELD FLAME FLOOR FRUIT ' +
+      'GHOST GIANT GLASS GRAPE GREEN HEART HONEY HORSE HOUSE JUICE KNIFE LEMON LIGHT MAGIC MANGO MONEY MOUSE MUSIC NIGHT NURSE ' +
+      'OCEAN OLIVE PAINT PANDA PAPER PARTY PEACH PEARL PIANO PILOT PIZZA PLANE PLANT PLATE QUEEN RADIO RIVER ROBOT ROUND SALAD ' +
+      'SHARK SHEEP SHELL SHIRT SHORE SKATE SLEEP SMILE SNAKE SPACE SPOON STAIR STONE STORM SUGAR SWEET TABLE TIGER TOAST TOOTH ' +
+      'TOWER TRAIN TRUCK WATCH WATER WHALE WORLD YACHT ZEBRA BLAZE CRISP DRIFT FROST GLOVE HAPPY JOLLY LUCKY MAPLE NOBLE ORBIT ' +
+      'PRIZE QUICK RAVEN SCARF SUNNY TWIST VIVID WITTY BRAVE CHARM DAISY FAIRY GRACE IVORY LUNAR MERRY PIXEL RELAX SOLAR TULIP').split(' ');
+    const $ = id => document.getElementById(id);
+    let answer, rows, cur, done, keyState, streak = 0;
+
+    function build() {
+      $('grid').innerHTML = '';
+      for (let r = 0; r < 6; r++) {
+        const g = document.createElement('div');
+        g.className = 'gr';
+        for (let c = 0; c < 5; c++) g.insertAdjacentHTML('beforeend', `<div class="t" id="t${r}${c}"></div>`);
+        $('grid').appendChild(g);
+      }
+      $('kb').innerHTML = '';
+      for (const k of [...'QWERTYUIOPASDFGHJKLZXCVBNM', '⌫', '↵']) {
+        const b = document.createElement('button');
+        b.textContent = k;
+        b.dataset.k = k;
+        b.addEventListener('click', () => key(k));
+        $('kb').appendChild(b);
+      }
+    }
+
+    function key(k) {
+      if (done) return;
+      if (k === '⌫') cur = cur.slice(0, -1);
+      else if (k === '↵') return submit();
+      else if (cur.length < 5) cur += k;
+      draw();
+    }
+
+    function score(guess) {
+      const res = Array(5).fill('x'), pool = [...answer];
+      [...guess].forEach((ch, i) => { if (ch === answer[i]) { res[i] = 'g'; pool[i] = null; } });
+      [...guess].forEach((ch, i) => { if (res[i] === 'x') { const j = pool.indexOf(ch); if (j >= 0) { res[i] = 'y'; pool[j] = null; } } });
+      return res;
+    }
+
+    function submit() {
+      if (cur.length < 5) { const row = $('grid').children[rows.length]; row.id = 'row'; row.classList.remove('shake'); void row.offsetWidth; row.classList.add('shake'); return; }
+      const res = score(cur);
+      rows.push({ w: cur, res });
+      [...cur].forEach((ch, i) => {
+        const rank = { x: 1, y: 2, g: 3 };
+        if (!keyState[ch] || rank[res[i]] > rank[keyState[ch]]) keyState[ch] = res[i];
+      });
+      const won = cur === answer;
+      cur = '';
+      draw();
+      if (won || rows.length === 6) {
+        done = true;
+        streak = won ? streak + 1 : 0;
+        if (won) W.best('five', streak);
+        setTimeout(() => W.overlay({ title: won ? ['Genius!', 'Magnificent!', 'Impressive!', 'Splendid!', 'Great!', 'Phew!'][rows.length - 1] : 'So close!', big: answer, text: `Streak ${streak}`, button: 'Next word', onStart: start }), 700);
+      }
+    }
+
+    function draw() {
+      for (let r = 0; r < 6; r++) for (let c = 0; c < 5; c++) {
+        const t = $(`t${r}${c}`), row = rows[r];
+        if (row) { t.textContent = row.w[c]; t.className = 't ' + row.res[c]; }
+        else if (r === rows.length) { t.textContent = cur[c] || ''; t.className = 't' + (cur[c] ? ' f' : ''); }
+        else { t.textContent = ''; t.className = 't'; }
+      }
+      [...$('kb').children].forEach(b => { b.className = keyState[b.dataset.k] || ''; });
+      $('hud').innerHTML = `${streak}<small>streak</small>`;
+    }
+
+    window.addEventListener('keydown', e => {
+      if (/^[a-z]$/i.test(e.key)) key(e.key.toUpperCase());
+      if (e.key === 'Backspace') key('⌫');
+      if (e.key === 'Enter') key('↵');
+    });
+
+    function start() { answer = W.pick(WORDS); rows = []; cur = ''; done = false; keyState = {}; draw(); }
+    build();
+    start();
+    W.overlay({ title: '🟩 Five', text: 'Guess the 5-letter word<br>in 6 tries. 🟩 right spot,<br>🟨 wrong spot.', onStart() {} });
+  </script>
+</body>
+</html>
