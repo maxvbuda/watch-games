@@ -119,9 +119,11 @@
       ctx.fillRect(0, 0, w, h);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      const r0 = Math.max(0, Math.floor(cam - 3)), r1 = Math.ceil(cam + h / cell + 1);
+      const r0 = Math.floor(cam - 3), r1 = Math.ceil(cam + h / cell + 1);
       for (let r = r0; r <= r1; r++) {
-        const l = laneAt(r), y = sy(r);
+        const y = sy(r);
+        if (r < 0) { ctx.fillStyle = '#3f9b3f'; ctx.fillRect(0, y, w, cell + 0.5); continue; }
+        const l = laneAt(r);
         ctx.fillStyle = l.type === 'grass' ? (r % 2 ? '#3f9b3f' : '#48a848') : l.type === 'road' ? '#3a3a3c' : '#1e6fd9';
         ctx.fillRect(0, y, w, cell + 0.5);
         ctx.font = `${Math.round(cell * 0.85)}px sans-serif`;
@@ -129,6 +131,7 @@
         if (l.type === 'road') {
           ctx.fillStyle = '#ffffff33';
           for (let x = 0; x < w; x += cell) ctx.fillRect(x + 4, y + cell - 1, cell / 2, 1);
+          ctx.fillStyle = '#000';   // emoji inherit fill alpha, so reset it
           for (const it of l.items) {
             ctx.save();
             ctx.translate((it.x + it.w / 2) * cell, y + cell / 2);
@@ -148,6 +151,7 @@
         }
       }
       {
+        ctx.fillStyle = '#000';
         ctx.font = `${Math.round(cell * 0.9)}px sans-serif`;
         ctx.fillText('🐔', (px + 0.5) * cell, sy(row) + cell / 2 - hopT * 40);
       }

@@ -109,6 +109,7 @@
       ctx.font = `${Math.round(fs)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#000';   // emoji inherit fill alpha from the splats, so reset it
       for (const it of items) { ctx.save(); ctx.translate(it.x, it.y); ctx.rotate(it.rot); ctx.fillText(it.e, 0, 0); ctx.restore(); }
       for (const hf of halves) {
         ctx.save();
