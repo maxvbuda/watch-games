@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Reaction</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #pad {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 16px;
+      gap: 4px;
+      transition: background 0.05s;
+    }
+    #pad.wait { background: #8a1c14; }
+    #pad.go { background: #1f8f3a; }
+    #pad.early { background: #8a5a00; }
+    #msg { font-size: 22px; font-weight: 800; }
+    #sub { font-size: 12px; opacity: 0.8; }
+    #dots { display: flex; gap: 5px; margin-top: 6px; }
+    #dots span { width: 7px; height: 7px; border-radius: 50%; background: #ffffff44; }
+    #dots span.on { background: #fff; }
+  </style>
+</head>
+<body class="game">
+  <div id="pad">
+    <div id="msg"></div>
+    <div id="sub"></div>
+    <div id="dots"></div>
+  </div>
+  <script src="../js/common.js"></script>
+  <script>
+    const ROUNDS = 5;
+    const pad = document.getElementById('pad');
+    const msg = document.getElementById('msg');
+    const sub = document.getElementById('sub');
+    const dots = document.getElementById('dots');
+    let phase = 'idle', times = [], goAt = 0, timer;
+
+    function show(cls, m, s) {
+      pad.className = cls;
+      msg.textContent = m;
+      sub.textContent = s || '';
+      dots.innerHTML = Array.from({ length: ROUNDS }, (_, i) => `<span class="${i < times.length ? 'on' : ''}"></span>`).join('');
+    }
+
+    function arm() {
+      phase = 'wait';
+      show('wait', 'Wait…', 'Tap when it turns green');
+      timer = setTimeout(() => {
+        phase = 'go';
+        goAt = performance.now();
+        show('go', 'TAP!');
+      }, W.rand(1200, 3800));
+    }
+
+    function tap() {
+      if (phase === 'wait') {
+        clearTimeout(timer);
+        phase = 'early';
+        show('early', 'Too soon!', 'Tap to try again');
+      } else if (phase === 'go') {
+        const ms = Math.round(performance.now() - goAt);
+        times.push(ms);
+        if (times.length >= ROUNDS) return finish();
+        phase = 'result';
+        show('', ms + ' ms', 'Tap for next');
+      } else if (phase === 'early' || phase === 'result') {
+        arm();
+      }
+    }
+
+    function finish() {
+      phase = 'done';
+      const avg = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+      const best = W.best('reaction', avg, true);
+      show('', '', '');
+      W.overlay({
+        title: avg < 250 ? '⚡ Lightning!' : avg < 350 ? 'Nice!' : 'Keep practicing',
+        big: avg + ' ms',
+        text: `avg of ${ROUNDS} · best ${best} ms<br>${times.join(' · ')}`,
+        button: 'Again',
+        onStart: start,
+      });
+    }
+
+    function start() {
+      times = [];
+      arm();
+    }
+
+    pad.addEventListener('touchstart', e => { e.preventDefault(); tap(); }, { passive: false });
+    pad.addEventListener('mousedown', tap);
+    W.overlay({ title: '⚡ Reaction', text: `Tap the instant the screen turns green. ${ROUNDS} rounds.`, onStart: start });
+  </script>
+</body>
+</html>
