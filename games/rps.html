@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Rock Paper Scissors</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 30px 6px max(6px, env(safe-area-inset-bottom)); gap: 4px; }
+    #arena { flex: 1; display: flex; align-items: center; justify-content: space-around; font-size: 44px; min-height: 0; }
+    #arena span { display: inline-block; transition: transform 0.2s; }
+    #arena .bob { animation: bob 0.25s 3 ease-in-out; }
+    @keyframes bob { 50% { transform: translateY(-10px); } }
+    #vs { font-size: 12px; color: var(--muted); }
+    #msg { text-align: center; font-size: 14px; font-weight: 700; height: 18px; }
+    #picks { display: flex; gap: 5px; }
+    #picks button { flex: 1; border: 0; border-radius: 14px; background: #2c2c2e; font-size: 26px; padding: 6px 0; }
+    #picks button:active { background: #48484a; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="arena"><span id="you">✊</span><span id="vs">vs</span><span id="cpu">✊</span></div>
+    <div id="msg">Pick one!</div>
+    <div id="picks"><button data-i="0">✊</button><button data-i="1">✋</button><button data-i="2">✌️</button></div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const HANDS = ['✊', '✋', '✌️'];
+    const $ = id => document.getElementById(id);
+    let streak = 0, wins = 0, losses = 0, busy = false;
+    const history = [];
+
+    // The watch looks for patterns in your picks — it's beatable, but not random.
+    function cpuPick() {
+      if (history.length >= 3 && Math.random() < 0.6) {
+        const counts = [0, 0, 0];
+        const last = history[history.length - 1];
+        for (let i = 0; i < history.length - 1; i++) if (history[i] === last) counts[history[i + 1]]++;
+        const predicted = counts.indexOf(Math.max(...counts));
+        if (Math.max(...counts) > 0) return (predicted + 1) % 3;
+      }
+      return W.randInt(0, 2);
+    }
+
+    function play(i) {
+      if (busy) return;
+      busy = true;
+      $('you').textContent = '✊';
+      $('cpu').textContent = '✊';
+      $('you').classList.add('bob');
+      $('cpu').classList.add('bob');
+      $('msg').textContent = 'Rock… paper… scissors…';
+      const c = cpuPick();
+      history.push(i);
+      setTimeout(() => {
+        $('you').classList.remove('bob');
+        $('cpu').classList.remove('bob');
+        $('you').textContent = HANDS[i];
+        $('cpu').textContent = HANDS[c];
+        const r = (i - c + 3) % 3;
+        if (r === 0) $('msg').textContent = 'Tie!';
+        else if (r === 1) { wins++; streak++; $('msg').textContent = 'You win! 🎉'; W.best('rps', streak); }
+        else { losses++; streak = 0; $('msg').textContent = 'Watch wins 🤖'; }
+        $('hud').innerHTML = `${wins}–${losses}<small>streak ${streak}</small>`;
+        busy = false;
+      }, 780);
+    }
+
+    document.querySelectorAll('#picks button').forEach(b => b.addEventListener('click', () => play(Number(b.dataset.i))));
+    $('hud').innerHTML = `0–0<small>streak 0</small>`;
+  </script>
+</body>
+</html>
