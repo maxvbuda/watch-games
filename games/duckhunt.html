@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Duck Hunt</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+
+    // Ducks flap across the sky; tap them. Each duck gets 3 shots. 5 escapes and it's over.
+    let ducks, score, escaped, shells, wave, spawnT, state = 'ready', shots = [], feathers = [];
+    const DS = () => view.w * 0.12;
+
+    function reset() { ducks = []; score = 0; escaped = 0; shells = 3; wave = 0; spawnT = 0.5; updateHud(); }
+    function updateHud() { hud.innerHTML = `${score}<small>${'🦆'.repeat(Math.max(0, 5 - escaped))}</small>`; }
+
+    function spawn() {
+      wave++;
+      shells = 3;
+      const n = wave > 6 && Math.random() < 0.4 ? 2 : 1;
+      for (let i = 0; i < n; i++) {
+        const fromLeft = Math.random() < 0.5;
+        const sp = view.w * (0.35 + Math.min(wave, 25) * 0.03);
+        ducks.push({ x: fromLeft ? -DS() : view.w + DS(), y: view.h * W.rand(0.55, 0.75), vx: (fromLeft ? 1 : -1) * sp * W.rand(0.8, 1.2), vy: -view.h * W.rand(0.12, 0.3), t: 0, dead: false, fall: 0, flee: 0 });
+      }
+    }
+
+    function shoot(p) {
+      if (state !== 'play') return;
+      if (shells <= 0) return;
+      shells--;
+      shots.push({ x: p.x, y: p.y, t: 0.15 });
+      for (const d of ducks) {
+        if (d.dead || d.flee) continue;
+        if (Math.hypot(p.x - d.x, p.y - d.y) < DS() * 0.75) {
+          d.dead = true; d.vx = 0; d.vy = 0;
+          score += 10 * Math.max(1, Math.floor(wave / 5) + 1);
+          for (let i = 0; i < 8; i++) feathers.push({ x: d.x, y: d.y, vx: W.rand(-50, 50), vy: W.rand(-60, 10), t: 1 });
+          updateHud();
+          return;
+        }
+      }
+      // Out of shells with a live duck: it flies off.
+      if (shells === 0) for (const d of ducks) if (!d.dead) d.flee = 1;
+    }
+
+    function update(dt) {
+      for (const d of ducks) {
+        d.t += dt;
+        if (d.dead) { d.fall += dt; if (d.fall > 0.35) d.vy += view.h * 3 * dt; }
+        else if (d.flee) { d.vy = -view.h * 1.2; }
+        else {
+          // Zig-zag: bounce off the sky and treetops.
+          if (d.y < view.h * 0.15) d.vy = Math.abs(d.vy);
+          if (d.y > view.h * 0.72) d.vy = -Math.abs(d.vy);
+          if (Math.random() < dt * 0.8) d.vy = -d.vy;
+        }
+        d.x += d.vx * dt; d.y += d.vy * dt;
+      }
+      for (const d of ducks) {
+        const off = d.x < -DS() * 2 || d.x > view.w + DS() * 2 || d.y < -DS() * 2;
+        if (!d.dead && off) { d.gone = true; escaped++; updateHud(); }
+        if (d.dead && d.y > view.h * 0.8) d.gone = true;
+      }
+      ducks = ducks.filter(d => !d.gone);
+      if (escaped >= 5) {
+        state = 'over';
+        const best = W.best('duckhunt', score);
+        setTimeout(() => W.overlay({ title: 'They got away!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 400);
+        return;
+      }
+      if (!ducks.length) { spawnT -= dt; if (spawnT <= 0) { spawn(); spawnT = 0.6; } }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#5ac8fa'); g.addColorStop(0.75, '#b8e6ff');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#fff';
+      for (const [x, y, r] of [[0.2, 0.2, 12], [0.7, 0.3, 16], [0.45, 0.12, 10]]) { ctx.beginPath(); ctx.arc(w * x, h * y, r, 0, Math.PI * 2); ctx.arc(w * x + r, h * y + 3, r * 0.8, 0, Math.PI * 2); ctx.fill(); }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000';
+      ctx.font = `${Math.round(DS())}px sans-serif`;
+      for (const d of ducks) {
+        ctx.save(); ctx.translate(d.x, d.y);
+        if (d.vx > 0 && !d.dead) ctx.scale(-1, 1);   // emoji duck faces left
+        if (d.dead) ctx.rotate(Math.PI * (d.fall > 0.35 ? 1 : 0.1));
+        ctx.translate(0, Math.sin(d.t * 18) * 1.5);
+        ctx.fillText(d.dead && d.fall < 0.35 ? '😵' : '🦆', 0, 0);
+        ctx.restore();
+      }
+      // Grass and bushes in front.
+      ctx.fillStyle = '#3f9b3f'; ctx.fillRect(0, h * 0.8, w, h);
+      ctx.font = `${Math.round(h * 0.12)}px sans-serif`;
+      for (const x of [0.1, 0.35, 0.65, 0.9]) ctx.fillText('🌳', w * x, h * 0.78);
+      for (const f of feathers) { f.t -= dt; f.vy += 40 * dt; f.x += f.vx * dt; f.y += f.vy * dt; ctx.fillStyle = `rgba(255,255,255,${Math.max(0, f.t)})`; ctx.fillRect(f.x, f.y, 3, 1.5); }
+      feathers = feathers.filter(f => f.t > 0);
+      for (const s of shots) {
+        s.t -= dt;
+        ctx.strokeStyle = '#ff453a'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 9, 0, Math.PI * 2); ctx.moveTo(s.x - 13, s.y); ctx.lineTo(s.x + 13, s.y); ctx.moveTo(s.x, s.y - 13); ctx.lineTo(s.x, s.y + 13); ctx.stroke();
+      }
+      shots = shots.filter(s => s.t > 0);
+      // Shells left.
+      for (let i = 0; i < 3; i++) { ctx.fillStyle = i < shells ? '#ff9f0a' : '#0003'; ctx.fillRect(8 + i * 8, h - 16, 5, 10); }
+    }
+
+    W.pointer(canvas, { down: shoot });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🦆 Duck Hunt', text: 'Tap the ducks! 3 shots each.<br>Let 5 escape and it\'s over.', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
