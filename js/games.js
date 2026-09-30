@@ -30,4 +30,5 @@ window.GAMES = [
   { id: 'blackjack', name: 'Blackjack', emoji: '♠️', color: '#1f8f3a', desc: 'Beat the dealer to 21', unit: ' chips' },
   { id: 'hilo', name: 'Higher or Lower', emoji: '🎴', color: '#bf5af2', desc: 'Guess the next card' },
   { id: 'balloons', name: 'Balloon Pop', emoji: '🎈', color: '#ff375f', desc: 'Pop them before they escape' },
+  { id: 'numbers', name: 'Number Rush', emoji: '🔢', color: '#64d2ff', desc: 'Tap 1–16 in order', unit: 's' },
 ];

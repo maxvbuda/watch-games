@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Number Rush</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 28px; }
+    #grid {
+      --size: min(96vw, calc(100vh - 34px));
+      width: var(--size); height: var(--size);
+      display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 1fr); gap: 4px;
+    }
+    .n {
+      border-radius: 10px; background: #2c2c2e; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: calc(var(--size) / 7); font-variant-numeric: tabular-nums; transition: background 0.1s;
+    }
+    .n.done { background: #30d15833; color: #30d15888; }
+    .n.bad { background: #ff453a; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="grid"></div></div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const N = 16;
+    const gridEl = document.getElementById('grid');
+    const hud = document.getElementById('hud');
+    let nextNum, startT, penalty, running = false;
+
+    function build() {
+      gridEl.innerHTML = '';
+      const nums = [...Array(N).keys()].map(i => i + 1).sort(() => Math.random() - 0.5);
+      for (const n of nums) {
+        const d = document.createElement('div');
+        d.className = 'n';
+        d.textContent = n;
+        const hit = e => { e.preventDefault(); tap(n, d); };
+        d.addEventListener('touchstart', hit, { passive: false });
+        d.addEventListener('mousedown', hit);
+        gridEl.appendChild(d);
+      }
+    }
+
+    function tap(n, d) {
+      if (!running) return;
+      if (n === nextNum) {
+        d.classList.add('done');
+        nextNum++;
+        if (nextNum > N) finish();
+      } else if (n > nextNum) {
+        penalty += 1;   // +1 second per wrong tap
+        d.classList.add('bad');
+        setTimeout(() => d.classList.remove('bad'), 200);
+      }
+    }
+
+    function elapsed() { return (performance.now() - startT) / 1000 + penalty; }
+
+    function finish() {
+      running = false;
+      const t = Math.round(elapsed() * 100) / 100;
+      const best = W.best('numbers', t, true);
+      W.overlay({ title: 'Done! 🔢', big: t.toFixed(2) + 's', text: `Best ${best.toFixed(2)}s${penalty ? ` · +${penalty}s penalty` : ''}`, button: 'Again', onStart: start });
+    }
+
+    function start() {
+      build();
+      nextNum = 1;
+      penalty = 0;
+      startT = performance.now();
+      running = true;
+    }
+
+    W.loop(() => { if (running) hud.innerHTML = `${elapsed().toFixed(1)}s<small>next: ${nextNum}</small>`; });
+    build();
+    W.overlay({ title: '🔢 Number Rush', text: 'Tap 1 to 16 in order,<br>as fast as you can!<br>Wrong tap = +1s', onStart: start });
+  </script>
+</body>
+</html>
