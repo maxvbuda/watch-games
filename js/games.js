@@ -49,4 +49,5 @@ window.GAMES = [
   { id: 'airhockey', name: 'Air Hockey', emoji: '🏒', color: '#64d2ff', desc: 'First to 5 vs the watch' },
   { id: 'slots', name: 'Slots', emoji: '🎰', color: '#c9302c', desc: 'Spin — the Crown pulls the lever', unit: ' credits' },
   { id: 'chimp', name: 'Chimp Test', emoji: '🐵', color: '#ac8e68', desc: 'Remember hidden numbers' },
+  { id: 'scramble', name: 'Word Scramble', emoji: '🔤', color: '#ffd60a', desc: 'Unscramble against the clock' },
 ];

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Word Scramble</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 32px 6px max(6px, env(safe-area-inset-bottom)); gap: 8px; }
+    .row { display: flex; gap: 3px; justify-content: center; min-height: 34px; }
+    .t {
+      width: 26px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 18px; border: 0; font-family: inherit; padding: 0;
+    }
+    #answer .t { background: #2c2c2e; color: #fff; }
+    #answer .t.empty { background: transparent; border: 1.5px dashed #48484a; }
+    #answer.good .t { background: #30d158; color: #000; }
+    #answer.bad .t { background: #ff453a; }
+    #pool .t { background: #ffd60a; color: #000; }
+    #pool .t.used { visibility: hidden; }
+    #ctrl { display: flex; gap: 5px; justify-content: center; }
+    #ctrl button { border: 0; border-radius: 14px; background: #2c2c2e; color: #fff; font: inherit; font-size: 12px; font-weight: 700; padding: 6px 12px; }
+    #timer { position: absolute; left: 38px; right: 60px; top: max(14px, env(safe-area-inset-top)); height: 5px; border-radius: 3px; background: #ffffff22; overflow: hidden; }
+    #bar { height: 100%; background: #ffd60a; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div class="row" id="answer"></div>
+    <div class="row" id="pool"></div>
+    <div id="ctrl"><button id="clear">Clear</button><button id="skip">Skip (−5s)</button></div>
+  </div>
+  <div id="timer"><div id="bar"></div></div>
+  <div class="hud" id="hud">0</div>
+  <script src="../js/common.js"></script>
+  <script>
+    const WORDS = ['APPLE', 'BEACH', 'CLOUD', 'DANCE', 'EAGLE', 'FLAME', 'GHOST', 'HONEY', 'JELLY', 'LEMON', 'MAGIC', 'NINJA',
+      'OCEAN', 'PIANO', 'QUEEN', 'ROBOT', 'SNAKE', 'TIGER', 'WATCH', 'ZEBRA', 'CANDY', 'PLANT', 'STORM', 'TRAIN', 'MOUSE',
+      'PIZZA', 'SPACE', 'CROWN', 'BRAIN', 'FROST', 'GAMES', 'HEART', 'LIGHT', 'MUSIC', 'PARTY', 'RIVER', 'SMILE', 'SUGAR',
+      'CASTLE', 'DRAGON', 'FOREST', 'GARDEN', 'JUNGLE', 'PLANET', 'ROCKET', 'SUMMER', 'WINTER', 'BUTTER', 'TURTLE', 'PENCIL'];
+    const TIME = 60;
+    const $ = id => document.getElementById(id);
+    let word, letters, picked, score, timeLeft, playing = false, checking = false;
+
+    function newWord() {
+      word = W.pick(WORDS);
+      do letters = [...word].sort(() => Math.random() - 0.5); while (letters.join('') === word);
+      picked = [];
+      draw();
+    }
+
+    function draw() {
+      $('answer').className = 'row';
+      $('answer').innerHTML = '';
+      for (let i = 0; i < word.length; i++) {
+        const d = document.createElement('div');
+        d.className = 't' + (picked[i] === undefined ? ' empty' : '');
+        d.textContent = picked[i] !== undefined ? letters[picked[i]] : '';
+        if (picked[i] !== undefined) d.addEventListener('click', () => { picked.splice(i, 1); draw(); });
+        $('answer').appendChild(d);
+      }
+      $('pool').innerHTML = '';
+      letters.forEach((l, i) => {
+        const b = document.createElement('button');
+        b.className = 't' + (picked.includes(i) ? ' used' : '');
+        b.textContent = l;
+        b.addEventListener('click', () => pick(i));
+        $('pool').appendChild(b);
+      });
+    }
+
+    function pick(i) {
+      if (!playing || checking || picked.includes(i)) return;
+      picked.push(i);
+      draw();
+      if (picked.length === word.length) {
+        const guess = picked.map(j => letters[j]).join('');
+        checking = true;
+        const ok = guess === word;
+        $('answer').className = 'row ' + (ok ? 'good' : 'bad');
+        setTimeout(() => {
+          checking = false;
+          if (ok) { score++; timeLeft = Math.min(TIME, timeLeft + 3); $('hud').textContent = score; newWord(); }
+          else { picked = []; draw(); }
+        }, ok ? 350 : 450);
+      }
+    }
+
+    $('clear').addEventListener('click', () => { picked = []; draw(); });
+    $('skip').addEventListener('click', () => { if (playing) { timeLeft -= 5; newWord(); } });
+
+    function start() { score = 0; timeLeft = TIME; playing = true; $('hud').textContent = '0'; newWord(); }
+
+    W.loop(dt => {
+      if (!playing) return;
+      timeLeft -= dt;
+      $('bar').style.width = Math.max(0, timeLeft / TIME * 100) + '%';
+      if (timeLeft <= 0) {
+        playing = false;
+        const best = W.best('scramble', score);
+        W.overlay({ title: "Time's up!", big: score, text: `Last word: ${word}<br>Best ${best}`, button: 'Again', onStart: start });
+      }
+    });
+    W.overlay({ title: '🔤 Word Scramble', text: 'Tap letters to unscramble.<br>Correct = +3 sec.', onStart: start });
+  </script>
+</body>
+</html>
