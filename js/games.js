@@ -54,4 +54,5 @@ window.GAMES = [
   { id: 'bowling', name: 'Bowling', emoji: '🎳', color: '#d9a066', desc: 'Swipe to bowl, curve to hook' },
   { id: 'reversi', name: 'Reversi', emoji: '⚫', color: '#1f7a3a', desc: 'Flip discs vs the watch' },
   { id: 'dots', name: 'Dots & Boxes', emoji: '🔲', color: '#30d158', desc: 'Claim more boxes than the watch' },
+  { id: 'pig', name: 'Pig Dice', emoji: '🐷', color: '#ff9fb4', desc: 'Push your luck to 50' },
 ];

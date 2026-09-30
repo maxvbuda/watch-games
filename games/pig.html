@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Pig Dice</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 30px 6px max(6px, env(safe-area-inset-bottom)); gap: 5px; }
+    #scores { display: flex; gap: 5px; }
+    .p { flex: 1; border-radius: 10px; background: #1c1c1e; padding: 4px 6px; border: 2px solid transparent; }
+    .p.on { border-color: #ffd60a; }
+    .p .n { font-size: 10px; color: var(--muted); }
+    .p .s { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .p .bar { height: 3px; background: #2c2c2e; border-radius: 2px; margin-top: 2px; }
+    .p .bar div { height: 100%; background: #30d158; border-radius: 2px; }
+    #mid { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 0; }
+    #die { font-size: 52px; line-height: 1; }
+    #die.roll { animation: roll 0.35s; }
+    @keyframes roll { 30% { transform: rotate(120deg) scale(0.8); } 70% { transform: rotate(260deg) scale(1.1); } }
+    #turn { text-align: center; }
+    #turn .v { font-size: 22px; font-weight: 800; }
+    #turn .l { font-size: 10px; color: var(--muted); }
+    #msg { text-align: center; font-size: 12px; min-height: 15px; }
+    #btns { display: flex; gap: 5px; }
+    #btns button { flex: 1; border: 0; border-radius: 18px; font: inherit; font-size: 15px; font-weight: 800; padding: 9px 0; }
+    #roll { background: #ffd60a; color: #000; }
+    #hold { background: #30d158; color: #000; }
+    #btns button:disabled { opacity: 0.3; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="scores">
+      <div class="p" id="p1"><div class="n">You</div><div class="s">0</div><div class="bar"><div></div></div></div>
+      <div class="p" id="p2"><div class="n">Watch</div><div class="s">0</div><div class="bar"><div></div></div></div>
+    </div>
+    <div id="mid"><div id="die">🎲</div><div id="turn"><div class="v">0</div><div class="l">this turn</div></div></div>
+    <div id="msg">Roll to start. A 1 loses your turn!</div>
+    <div id="btns"><button id="roll">Roll</button><button id="hold">Hold</button></div>
+  </div>
+  <script src="../js/common.js"></script>
+  <script>
+    const GOAL = 50;
+    const FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+    const $ = id => document.getElementById(id);
+    let score, turnPts, who, busy, wins = 0;
+
+    function draw() {
+      [1, 2].forEach(p => {
+        const el = $('p' + p);
+        el.classList.toggle('on', who === p);
+        el.querySelector('.s').textContent = score[p];
+        el.querySelector('.bar div').style.width = Math.min(100, score[p] / GOAL * 100) + '%';
+      });
+      $('turn').querySelector('.v').textContent = turnPts;
+      $('roll').disabled = $('hold').disabled = who !== 1 || busy;
+      $('hold').disabled = $('hold').disabled || turnPts === 0;
+    }
+
+    function rollDie() {
+      return new Promise(res => {
+        const v = W.randInt(1, 6);
+        const d = $('die');
+        d.classList.remove('roll'); void d.offsetWidth; d.classList.add('roll');
+        busy = true; draw();
+        setTimeout(() => { d.textContent = FACES[v]; d.style.color = v === 1 ? '#ff453a' : '#fff'; busy = false; res(v); }, 350);
+      });
+    }
+
+    async function roll() {
+      const v = await rollDie();
+      if (v === 1) {
+        $('msg').textContent = who === 1 ? 'Rolled a 1 — turn lost! 🐷' : 'Watch rolled a 1!';
+        turnPts = 0;
+        return endTurn();
+      }
+      turnPts += v;
+      if (score[who] + turnPts >= GOAL) return hold();
+      draw();
+    }
+
+    function hold() {
+      score[who] += turnPts;
+      $('msg').textContent = `${who === 1 ? 'You' : 'Watch'} banked ${turnPts}`;
+      turnPts = 0;
+      if (score[who] >= GOAL) return finish();
+      endTurn();
+    }
+
+    function endTurn() {
+      who = 3 - who;
+      draw();
+      if (who === 2) setTimeout(aiTurn, 700);
+    }
+
+    async function aiTurn() {
+      busy = true;
+      // Watch strategy: hold at 20, or less when it's close to winning / far behind.
+      while (who === 2) {
+        const target = score[2] + 20 >= GOAL ? GOAL - score[2] : score[1] - score[2] > 20 ? 25 : 18;
+        if (turnPts >= target) { busy = false; return hold(); }
+        await roll();
+        busy = who === 2;
+        draw();
+        await new Promise(r => setTimeout(r, 300));
+      }
+      busy = false;
+      draw();
+    }
+
+    function finish() {
+      draw();
+      const won = score[1] >= GOAL;
+      if (won) { wins++; W.best('pig', wins); }
+      setTimeout(() => W.overlay({ title: won ? 'You win! 🐷' : 'Watch wins 🤖', big: `${score[1]}–${score[2]}`, text: `First to ${GOAL}`, button: 'Again', onStart: start }), 500);
+    }
+
+    $('roll').addEventListener('click', () => { if (who === 1 && !busy) roll(); });
+    $('hold').addEventListener('click', () => { if (who === 1 && !busy && turnPts) hold(); });
+
+    function start() {
+      score = { 1: 0, 2: 0 }; turnPts = 0; who = 1; busy = false;
+      $('die').textContent = '🎲'; $('die').style.color = '';
+      $('msg').textContent = 'Roll to start. A 1 loses your turn!';
+      draw();
+    }
+    start();
+  </script>
+</body>
+</html>
