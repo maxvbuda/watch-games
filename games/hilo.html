@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Higher or Lower</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; padding: 30px 6px max(6px, env(safe-area-inset-bottom)); gap: 6px; }
+    #cards { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 0; }
+    .card {
+      height: min(100%, 110px); aspect-ratio: 5 / 7; border-radius: 8px; background: #fff; color: #000;
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+      font-weight: 800; font-size: 26px; line-height: 1;
+    }
+    .card small { font-size: 20px; }
+    .card.red { color: #d70015; }
+    .card.next { background: repeating-linear-gradient(45deg, #bf5af2, #bf5af2 4px, #8e3fb8 4px, #8e3fb8 8px); }
+    .card.flip { animation: flip 0.25s ease-out; }
+    @keyframes flip { from { transform: rotateY(90deg); } }
+    #btns { display: flex; gap: 6px; width: 100%; }
+    #btns button { flex: 1; border: 0; border-radius: 18px; padding: 10px 0; font: inherit; font-size: 15px; font-weight: 800; color: #000; }
+    #hi { background: #30d158; }
+    #lo { background: #ff9f0a; }
+    #msg { font-size: 12px; color: var(--muted); height: 14px; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="cards"><div class="card" id="cur"></div><div class="card next" id="nxt"></div></div>
+    <div id="msg">Is the next card higher or lower?</div>
+    <div id="btns"><button id="lo">▼ Lower</button><button id="hi">▲ Higher</button></div>
+  </div>
+  <div class="hud" id="hud">0</div>
+  <script src="../js/common.js"></script>
+  <script>
+    const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+    const SUITS = ['♠', '♥', '♦', '♣'];
+    const $ = id => document.getElementById(id);
+    let cur, streak = 0, busy = false;
+
+    const rand = () => ({ v: W.randInt(0, 12), s: W.pick(SUITS) });
+    function show(el, c) {
+      el.className = 'card flip' + (c.s === '♥' || c.s === '♦' ? ' red' : '');
+      el.innerHTML = `${RANKS[c.v]}<small>${c.s}</small>`;
+    }
+
+    function guess(higher) {
+      if (busy) return;
+      busy = true;
+      let next;
+      do next = rand(); while (next.v === cur.v);   // no ties
+      show($('nxt'), next);
+      const right = higher ? next.v > cur.v : next.v < cur.v;
+      setTimeout(() => {
+        if (right) {
+          streak++;
+          $('hud').textContent = streak;
+          $('msg').textContent = 'Correct! ✅';
+          cur = next;
+          show($('cur'), cur);
+          $('nxt').className = 'card next';
+          $('nxt').innerHTML = '';
+          busy = false;
+        } else {
+          const best = W.best('hilo', streak);
+          W.overlay({ title: 'Wrong! ❌', big: streak, text: `Streak · best ${best}`, button: 'Again', onStart: start });
+        }
+      }, 650);
+    }
+
+    function start() {
+      streak = 0;
+      busy = false;
+      cur = rand();
+      show($('cur'), cur);
+      $('nxt').className = 'card next';
+      $('nxt').innerHTML = '';
+      $('hud').textContent = '0';
+      $('msg').textContent = 'Is the next card higher or lower?';
+    }
+
+    $('hi').addEventListener('click', () => guess(true));
+    $('lo').addEventListener('click', () => guess(false));
+    start();
+  </script>
+</body>
+</html>

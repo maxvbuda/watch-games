@@ -27,5 +27,6 @@ window.GAMES = [
   { id: 'lightsout', name: 'Lights Out', emoji: '💡', color: '#ffd60a', desc: 'Switch every light off' },
   { id: 'fifteen', name: '15 Puzzle', emoji: '🧩', color: '#ff9f0a', desc: 'Slide tiles into order', unit: ' moves' },
   { id: 'orbit', name: 'Orbit', emoji: '🪐', color: '#5e5ce6', desc: 'Tap to reverse, grab gems' },
-  { id: 'blackjack', name: 'Blackjack', emoji: '🃏', color: '#1f8f3a', desc: 'Beat the dealer to 21', unit: ' chips' },
+  { id: 'blackjack', name: 'Blackjack', emoji: '♠️', color: '#1f8f3a', desc: 'Beat the dealer to 21', unit: ' chips' },
+  { id: 'hilo', name: 'Higher or Lower', emoji: '🎴', color: '#bf5af2', desc: 'Guess the next card' },
 ];
