@@ -72,6 +72,7 @@ window.GAMES = [
   { id: 'artillery', name: 'Artillery', emoji: '💣', color: '#5b7f3a', desc: 'Crown aims — first to 3 hits' },
   { id: 'safe', name: 'Safe Cracker', emoji: '💰', color: '#6e6e73', desc: 'Spin the Crown to find the code' },
   { id: 'nonogram', name: 'Nonogram', emoji: '🖼️', color: '#0a84ff', desc: 'Fill the grid from number clues' },
+  { id: 'golfsolitaire', name: 'Golf Solitaire', emoji: '🂡', color: '#1f8f3a', desc: 'Clear cards one rank up or down', unit: ' left' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
@@ -80,7 +81,7 @@ window.CATEGORIES = {
     'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery'],
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe'],
-  Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps'],
+  Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire'],
   Sports: ['golf', 'hoops', 'bowling', 'darts'],
   Fun: ['eightball', 'slots', 'cookie', 'plinko', 'pet'],
 };

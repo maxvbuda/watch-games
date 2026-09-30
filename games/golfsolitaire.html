@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Golf Solitaire</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    body.game { background: #0b3d1f; }
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 30px 3px max(4px, env(safe-area-inset-bottom)); gap: 6px; }
+    #cols { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; min-height: 0; }
+    .col { position: relative; }
+    .card {
+      position: absolute; left: 0; right: 0; height: 36px; border-radius: 4px; background: #fff; color: #000;
+      font-weight: 800; font-size: 12px; line-height: 1; padding: 2px 3px; box-shadow: 0 1px 2px #0006; border: 0; text-align: left; font-family: inherit;
+    }
+    .card.red { color: #d70015; }
+    .card.top.ok { box-shadow: 0 0 0 2px #ffd60a; }
+    .card.bad { animation: shake 0.25s; }
+    @keyframes shake { 30% { transform: translateX(-3px); } 60% { transform: translateX(3px); } }
+    #bottom { display: flex; align-items: center; gap: 8px; justify-content: center; height: 46px; }
+    #stock, #pile { position: relative; width: 34px; height: 46px; border-radius: 5px; }
+    #stock { background: repeating-linear-gradient(45deg, #0a84ff, #0a84ff 3px, #0060c0 3px, #0060c0 6px); border: 0; color: #fff; font-weight: 800; font-size: 12px; }
+    #stock:disabled { opacity: 0.3; }
+    #pile { background: #fff; color: #000; font-weight: 800; font-size: 16px; display: flex; align-items: center; justify-content: center; flex-direction: column; line-height: 1; }
+    #pile.red { color: #d70015; }
+    #info { font-size: 10px; color: #a7d7b5; width: 60px; text-align: center; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="cols"></div>
+    <div id="bottom"><button id="stock"></button><div id="pile"></div><div id="info">Play ±1 onto the pile</div></div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+    const SUITS = ['♠', '♥', '♦', '♣'];
+    const $ = id => document.getElementById(id);
+    let cols, stock, pile, done;
+
+    const red = c => c.s === '♥' || c.s === '♦';
+    // Golf rules: play a column's top card if it's one rank above or below the pile (no wrap K↔A).
+    const fits = c => Math.abs(c.v - pile[pile.length - 1].v) === 1;
+    const left = () => cols.reduce((a, c) => a + c.length, 0);
+
+    function draw() {
+      $('cols').innerHTML = '';
+      const colH = $('cols').clientHeight;
+      cols.forEach((col, ci) => {
+        const el = document.createElement('div');
+        el.className = 'col';
+        const step = Math.min(15, (colH - 36) / Math.max(1, col.length - 1));
+        col.forEach((c, k) => {
+          const top = k === col.length - 1;
+          const b = document.createElement('button');
+          b.className = 'card' + (red(c) ? ' red' : '') + (top ? ' top' : '') + (top && !done && fits(c) ? ' ok' : '');
+          b.style.top = k * step + 'px';
+          b.innerHTML = `${RANKS[c.v]}<br>${c.s}`;
+          if (top) b.addEventListener('click', () => play(ci, b));
+          el.appendChild(b);
+        });
+        $('cols').appendChild(el);
+      });
+      const p = pile[pile.length - 1];
+      $('pile').className = red(p) ? 'red' : '';
+      $('pile').innerHTML = `${RANKS[p.v]}<span style="font-size:13px">${p.s}</span>`;
+      $('stock').textContent = stock.length || '';
+      $('stock').disabled = !stock.length;
+      $('hud').innerHTML = `${left()}<small>cards left</small>`;
+    }
+
+    function play(ci, el) {
+      if (done) return;
+      const c = cols[ci][cols[ci].length - 1];
+      if (!fits(c)) { el.classList.remove('bad'); void el.offsetWidth; el.classList.add('bad'); return; }
+      pile.push(cols[ci].pop());
+      draw();
+      check();
+    }
+
+    function deal() { if (!done && stock.length) { pile.push(stock.pop()); draw(); check(); } }
+
+    function check() {
+      const canMove = cols.some(c => c.length && fits(c[c.length - 1]));
+      if (left() === 0 || (!stock.length && !canMove)) {
+        done = true;
+        draw();
+        const n = left();
+        const best = W.best('golfsolitaire', n, true);
+        setTimeout(() => W.overlay({ title: n === 0 ? 'Cleared! 🏆' : 'No more moves', big: n + ' left', text: `Best ${best} left (lower is better)`, button: 'New deal', onStart: start }), 500);
+      }
+    }
+
+    function start() {
+      const deck = [];
+      for (const s of SUITS) for (let v = 0; v < 13; v++) deck.push({ v, s });
+      deck.sort(() => Math.random() - 0.5);
+      cols = Array.from({ length: 7 }, () => deck.splice(0, 5));
+      pile = [deck.pop()];
+      stock = deck;
+      done = false;
+      draw();
+    }
+
+    $('stock').addEventListener('click', deal);
+    start();
+    window.addEventListener('resize', draw);
+  </script>
+</body>
+</html>
