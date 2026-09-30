@@ -40,4 +40,5 @@ window.GAMES = [
   { id: 'rps', name: 'Rock Paper Scissors', emoji: '✌️', color: '#ff9f0a', desc: 'Outguess the watch' },
   { id: 'golf', name: 'Mini Golf', emoji: '⛳️', color: '#2f8f3f', desc: '6 holes, drag to putt', unit: ' strokes' },
   { id: 'jumper', name: 'Jumper', emoji: '🐸', color: '#30d158', desc: 'Bounce up — crown steers' },
+  { id: 'stroop', name: 'Color Clash', emoji: '🌈', color: '#bf5af2', desc: 'Ink color, not the word' },
 ];

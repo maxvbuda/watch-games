@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Color Clash</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 30px 6px max(6px, env(safe-area-inset-bottom)); gap: 5px; }
+    #rule { text-align: center; font-size: 11px; color: var(--muted); }
+    #word { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 900; letter-spacing: 1px; }
+    #word.pop { animation: pop 0.15s; }
+    @keyframes pop { from { transform: scale(0.7); } }
+    #opts { flex: 1.2; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    #opts button { border: 0; border-radius: 12px; font: inherit; font-size: 13px; font-weight: 800; color: #000; }
+    #timer { position: absolute; left: 38px; right: 60px; top: max(14px, env(safe-area-inset-top)); height: 5px; border-radius: 3px; background: #ffffff22; overflow: hidden; }
+    #bar { height: 100%; background: #fff; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="rule">Tap the INK color, not the word</div>
+    <div id="word"></div>
+    <div id="opts"></div>
+  </div>
+  <div id="timer"><div id="bar"></div></div>
+  <div class="hud" id="hud">0</div>
+  <script src="../js/common.js"></script>
+  <script>
+    const COLORS = [
+      { n: 'RED', c: '#ff453a' }, { n: 'BLUE', c: '#0a84ff' }, { n: 'GREEN', c: '#30d158' },
+      { n: 'YELLOW', c: '#ffd60a' }, { n: 'PURPLE', c: '#bf5af2' }, { n: 'ORANGE', c: '#ff9f0a' },
+    ];
+    const $ = id => document.getElementById(id);
+    const TIME = 30;
+    let ink, score, timeLeft, playing = false;
+
+    function next() {
+      const word = W.pick(COLORS);
+      do ink = W.pick(COLORS); while (ink === word && Math.random() < 0.8);
+      $('word').textContent = word.n;
+      $('word').style.color = ink.c;
+      $('word').classList.remove('pop'); void $('word').offsetWidth; $('word').classList.add('pop');
+      // Four options: the ink, the word, and two others. Buttons show names in neutral colors.
+      const opts = new Set([ink, word]);
+      while (opts.size < 4) opts.add(W.pick(COLORS));
+      $('opts').innerHTML = '';
+      [...opts].sort(() => Math.random() - 0.5).forEach(o => {
+        const b = document.createElement('button');
+        b.textContent = o.n;
+        b.style.background = score > 8 ? W.pick(COLORS).c : '#e5e5ea';   // later: button colors lie too
+        const go = e => { e.preventDefault(); answer(o); };
+        b.addEventListener('touchstart', go, { passive: false });
+        b.addEventListener('mousedown', go);
+        $('opts').appendChild(b);
+      });
+    }
+
+    function answer(o) {
+      if (!playing) return;
+      if (o === ink) { score++; timeLeft = Math.min(TIME, timeLeft + 0.5); }
+      else { timeLeft -= 3; document.body.style.background = '#400'; setTimeout(() => (document.body.style.background = ''), 120); }
+      $('hud').textContent = score;
+      next();
+    }
+
+    function start() { score = 0; timeLeft = TIME; playing = true; $('hud').textContent = '0'; next(); }
+
+    W.loop(dt => {
+      if (!playing) return;
+      timeLeft -= dt;
+      $('bar').style.width = Math.max(0, timeLeft / TIME * 100) + '%';
+      if (timeLeft <= 0) {
+        playing = false;
+        const best = W.best('stroop', score);
+        W.overlay({ title: "Time's up!", big: score, text: `Best ${best}`, button: 'Again', onStart: start });
+      }
+    });
+    W.overlay({ title: '🌈 Color Clash', text: 'Tap the color of the INK,<br>not what the word says!', onStart: start });
+  </script>
+</body>
+</html>
