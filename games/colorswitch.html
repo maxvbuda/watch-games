@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Color Switch</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const COLORS = ['#ff375f', '#ffd60a', '#64d2ff', '#bf5af2'];
+    const TAU = Math.PI * 2;
+
+    // World y grows upward; screen y = camY - worldY + h * 0.7
+    let ball, rings, switches, stars, camY, score, state = 'ready', t = 0, burst = [];
+    const BR = () => view.w * 0.035;
+    const RR = () => view.w * 0.3;
+    const GAP = () => view.h * 0.95;
+
+    function reset() {
+      ball = { y: 0, vy: 0, color: W.randInt(0, 3), started: false };
+      rings = [];
+      switches = [];
+      stars = [];
+      camY = 0;
+      score = 0;
+      for (let i = 0; i < 4; i++) addRing(view.h * 0.55 + i * GAP());
+      hud.textContent = '0';
+    }
+
+    function addRing(y) {
+      const n = rings.length;
+      rings.push({ y, rot: Math.random() * TAU, speed: (1.1 + Math.min(n, 20) * 0.07) * (n % 2 ? -1 : 1) });
+      stars.push({ y, got: false });
+      switches.push({ y: y + GAP() / 2, used: false });
+    }
+
+    function tap() {
+      if (state !== 'play') return;
+      ball.vy = view.h * 1.05;
+      ball.started = true;
+    }
+
+    function segAt(ring, ang) {
+      const a = ((ang - ring.rot) % TAU + TAU) % TAU;
+      return Math.floor(a / (TAU / 4));
+    }
+
+    function update(dt) {
+      t += dt;
+      for (const r of rings) r.rot += r.speed * dt;
+      if (ball.started) {
+        ball.vy -= view.h * 3 * dt;
+        ball.y += ball.vy * dt;
+      }
+      if (ball.y > camY) camY = ball.y;
+      if (ball.y < camY - view.h * 0.4) return die();
+
+      const br = BR(), rr = RR(), th = rr * 0.16;
+      for (const r of rings) {
+        const dy = ball.y - r.y;
+        // Ball crosses the ring at its bottom (dy ≈ -rr) or top (dy ≈ +rr).
+        for (const side of [-1, 1]) {
+          if (Math.abs(dy - side * rr) < th / 2 + br * 0.8) {
+            const ang = side > 0 ? -Math.PI / 2 : Math.PI / 2;  // screen angles: top = -90°
+            if (segAt(r, ang) !== ball.color) return die();
+          }
+        }
+      }
+      for (const s of stars) if (!s.got && Math.abs(ball.y - s.y) < br * 2) { s.got = true; score++; hud.textContent = score; }
+      for (const s of switches) {
+        if (!s.used && Math.abs(ball.y - s.y) < br * 2) {
+          s.used = true;
+          let c; do c = W.randInt(0, 3); while (c === ball.color);
+          ball.color = c;
+        }
+      }
+      while (rings[rings.length - 1].y < camY + view.h * 2) addRing(rings[rings.length - 1].y + GAP());
+      while (rings.length && rings[0].y < camY - view.h) { rings.shift(); stars.shift(); switches.shift(); }
+    }
+
+    function die() {
+      state = 'over';
+      for (let i = 0; i < 24; i++) burst.push({ x: 0, y: ball.y, vx: W.rand(-1, 1) * view.w, vy: W.rand(-1, 1) * view.w, c: W.pick(COLORS), t: 0.8 });
+      const best = W.best('colorswitch', score);
+      setTimeout(() => W.overlay({ title: 'Wrong color!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 800);
+    }
+
+    const sy = y => camY - y + view.h * 0.62;
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#16161a';
+      ctx.fillRect(0, 0, w, h);
+      const rr = RR(), br = BR();
+      ctx.lineWidth = rr * 0.16;
+      ctx.lineCap = 'butt';
+      for (const r of rings) {
+        const y = sy(r.y);
+        if (y < -rr * 2 || y > h + rr * 2) continue;
+        for (let i = 0; i < 4; i++) {
+          ctx.strokeStyle = COLORS[i];
+          ctx.beginPath();
+          ctx.arc(w / 2, y, rr, r.rot + i * TAU / 4, r.rot + (i + 1) * TAU / 4);
+          ctx.stroke();
+        }
+      }
+      ctx.font = `${Math.round(br * 3)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const s of stars) if (!s.got) ctx.fillText('⭐️', w / 2, sy(s.y));
+      for (const s of switches) {
+        if (s.used) continue;
+        const y = sy(s.y);
+        for (let i = 0; i < 4; i++) {
+          ctx.fillStyle = COLORS[i];
+          ctx.beginPath(); ctx.moveTo(w / 2, y); ctx.arc(w / 2, y, br * 1.5, i * TAU / 4 + t, (i + 1) * TAU / 4 + t); ctx.fill();
+        }
+      }
+      if (state !== 'over') {
+        ctx.fillStyle = COLORS[ball.color];
+        ctx.beginPath(); ctx.arc(w / 2, sy(ball.y), br, 0, TAU); ctx.fill();
+      }
+      for (const p of burst) {
+        p.t -= dt; p.x += p.vx * dt; p.y -= p.vy * dt;
+        ctx.fillStyle = p.c;
+        ctx.globalAlpha = Math.max(0, p.t);
+        ctx.beginPath(); ctx.arc(w / 2 + p.x, sy(p.y), 2.5, 0, TAU); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      burst = burst.filter(p => p.t > 0);
+      if (state === 'play' && !ball.started) {
+        ctx.fillStyle = '#8e8e93';
+        ctx.font = '600 12px -apple-system, system-ui';
+        ctx.fillText('Tap to bounce', w / 2, h * 0.85);
+      }
+    }
+
+    W.pointer(canvas, { down: tap });
+    window.addEventListener('keydown', e => { if (e.key === ' ') tap(); });
+
+    function start() { reset(); state = 'play'; }
+
+    reset();
+    W.overlay({ title: '🎨 Color Switch', text: 'Tap to bounce up.<br>Only pass through<br>your own color!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
