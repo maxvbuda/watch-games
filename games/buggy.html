@@ -79,7 +79,7 @@
       return {
         x: p.x + nx * side * 16, y: p.y + ny * side * 16, a: p.a, v: 0, idx: back, laps: -1, check: true,
         color: COLORS[i], name: NAMES[i], ai: i > 0, item: null, rolling: 0, spin: 0, boost: 0, shield: 0,
-        skill: 0.9 + Math.random() * 0.12, lane: W.rand(-0.5, 0.5), itemT: 0, done: false,
+        skill: 0.86 + Math.random() * 0.1, lane: W.rand(-0.5, 0.5), itemT: 0, done: false,   // skill < 1: rivals top out a bit below you
       };
     }
 
@@ -175,7 +175,10 @@
       if (c.spin <= 0) c.a += steer * 2.4 * dt * Math.min(1, c.v / 60);
 
       // Everyone auto-accelerates; sand slows you down; boosts go fast.
-      const top = (onTrack ? 150 : 72) * (c.ai ? c.skill : 1) * (c.boost > 0 ? 1.55 : 1) * (c.done && !c.ai ? 0.4 : 1);
+      // Gentle catch-up: rivals far ahead of you ease off, rivals far behind push a little harder.
+      let band = 1;
+      if (c.ai && !me.done) band = W.clamp(1 - (progress(c) - progress(me)) / N * 0.7, 0.78, 1.08);
+      const top = (onTrack ? 150 : 112) * (c.ai ? c.skill * band : 1) * (c.boost > 0 ? 1.55 : 1) * (c.done && !c.ai ? 0.4 : 1);
       if (state === 'race' && c.spin <= 0) c.v += (top - c.v) * Math.min(1, dt * (c.v < top ? 1.1 : 2.5));
       c.x += Math.cos(c.a) * c.v * dt;
       c.y += Math.sin(c.a) * c.v * dt;
@@ -251,8 +254,8 @@
       ctx.fillRect(0, 0, w, h);
       ctx.save();
       // Chase camera: rotate the world so your buggy always points up.
-      const Z = Math.min(w, h) / 190;
-      ctx.translate(w / 2, h * 0.68);
+      const Z = Math.min(w, h) / 240;   // zoomed out so you can see turns coming
+      ctx.translate(w / 2, h * 0.76);
       ctx.scale(Z, Z);
       ctx.rotate(-Math.PI / 2 - me.a);
       ctx.translate(-me.x, -me.y);
