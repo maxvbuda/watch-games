@@ -22,4 +22,5 @@ window.GAMES = [
   { id: 'knife', name: 'Knife Hit', emoji: '🔪', color: '#a0703c', desc: 'Stick knives in the log' },
   { id: 'colorswitch', name: 'Color Switch', emoji: '🎨', color: '#ff375f', desc: 'Pass through your color' },
   { id: 'invaders', name: 'Invaders', emoji: '👾', color: '#bf5af2', desc: 'Defend against the swarm' },
+  { id: 'fruit', name: 'Fruit Slice', emoji: '🍉', color: '#ff453a', desc: 'Swipe to slice, dodge bombs' },
 ];
