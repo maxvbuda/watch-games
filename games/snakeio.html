@@ -21,9 +21,17 @@
       font-size: 18px;
     }
     .boost.on { background: rgba(255, 214, 10, 0.55); color: #000; }
+
+    /* Digital Crown support: the crown scrolls the page, so the page is made
+       scrollable (a tall invisible spacer) while everything visible stays fixed. */
+    body.game.crown { position: static; overflow-y: scroll; scrollbar-width: none; }
+    body.game.crown::-webkit-scrollbar { display: none; }
+    body.crown canvas.full, body.crown .hud, body.crown .boost, body.crown .back, body.crown .overlay { position: fixed; }
+    #crown-spacer { height: 200000px; width: 1px; pointer-events: none; }
   </style>
 </head>
-<body class="game">
+<body class="game crown">
+  <div id="crown-spacer"></div>
   <canvas id="c" class="full"></canvas>
   <div class="hud" id="hud"></div>
   <button class="boost" id="boost" aria-label="Boost">⚡</button>
@@ -380,6 +388,24 @@
       const dx = p.x - view.w / 2, dy = p.y - view.h / 2;
       if (dx * dx + dy * dy > 16) targetAngle = Math.atan2(dy, dx);
     }
+
+    // Digital Crown: every pixel scrolled turns the snake. Scroll down = clockwise.
+    const CROWN_TURN = 0.016;  // radians per scrolled pixel (~1 crown turn ≈ 1 snake turn)
+    const MID = 100000;
+    let lastScroll = MID;
+    window.scrollTo(0, MID);
+    window.addEventListener('scroll', () => {
+      const y = window.scrollY;
+      const delta = y - lastScroll;
+      lastScroll = y;
+      if (running && delta) {
+        // Keep the target within reach of the current heading so fast spins don't wrap around.
+        const diff = W.clamp(angleDiff(player.angle, targetAngle) + delta * CROWN_TURN, -2.5, 2.5);
+        targetAngle = player.angle + diff;
+      }
+      // Recentre long before hitting either end of the spacer.
+      if (Math.abs(y - MID) > 60000) { window.scrollTo(0, MID); lastScroll = MID; }
+    }, { passive: true });
     const setBoost = on => e => {
       e.preventDefault();
       e.stopPropagation();
@@ -415,7 +441,7 @@
     reset();
     W.overlay({
       title: '🐍 Snake.io',
-      text: 'Touch to steer.<br>Hold ⚡ to boost.<br>Make others crash into you!',
+      text: 'Turn the Digital Crown<br>(or touch) to steer.<br>Hold ⚡ to boost.',
       onStart: start,
     });
 
