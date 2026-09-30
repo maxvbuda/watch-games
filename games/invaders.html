@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Invaders</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const COLS = 6, ROWS = 4;
+    const ALIENS = ['👾', '👽', '🛸', '🐙'];
+
+    let ship, aliens, shots, bombs, dirX, fireT, score, lives, wave, state = 'ready', hitT = 0, sparks = [];
+    const AS = () => view.w * 0.11;   // alien size
+    const SY = () => view.h - 22;
+
+    function buildWave() {
+      aliens = [];
+      const s = AS(), gx = s * 1.35;
+      const x0 = (view.w - gx * (COLS - 1)) / 2;
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        aliens.push({ x: x0 + c * gx, y: 44 + r * s * 1.15, e: ALIENS[r], pts: (ROWS - r) * 10 });
+      }
+      dirX = 1;
+      shots = [];
+      bombs = [];
+    }
+
+    function updateHud() { hud.innerHTML = `${score}<small>${'♥'.repeat(lives)} · W${wave}</small>`; }
+
+    function update(dt) {
+      const s = AS();
+      // Swarm speeds up as it thins out.
+      const speed = view.w * (0.12 + wave * 0.03) * (1 + (COLS * ROWS - aliens.length) * 0.06);
+      let edge = false;
+      for (const a of aliens) {
+        a.x += dirX * speed * dt;
+        if ((dirX > 0 && a.x > view.w - s * 0.6) || (dirX < 0 && a.x < s * 0.6)) edge = true;
+      }
+      if (edge) { dirX *= -1; for (const a of aliens) a.y += s * 0.45; }
+
+      fireT -= dt;
+      if (fireT <= 0) { shots.push({ x: ship.x, y: SY() - 10 }); fireT = 0.38; }
+      for (const b of shots) b.y -= view.h * 1.3 * dt;
+      shots = shots.filter(b => b.y > 0 && !b.hit);
+
+      for (const b of shots) {
+        for (const a of aliens) {
+          if (Math.abs(b.x - a.x) < s * 0.5 && Math.abs(b.y - a.y) < s * 0.5) {
+            a.dead = b.hit = true;
+            score += a.pts;
+            for (let i = 0; i < 8; i++) sparks.push({ x: a.x, y: a.y, vx: W.rand(-60, 60), vy: W.rand(-60, 60), t: 0.4 });
+            break;
+          }
+        }
+      }
+      aliens = aliens.filter(a => !a.dead);
+
+      // Random aliens drop bombs.
+      if (aliens.length && Math.random() < dt * (0.8 + wave * 0.3)) {
+        const a = W.pick(aliens);
+        bombs.push({ x: a.x, y: a.y + s * 0.4 });
+      }
+      for (const b of bombs) b.y += view.h * (0.5 + wave * 0.04) * dt;
+      hitT = Math.max(0, hitT - dt);
+      for (const b of bombs) {
+        if (hitT <= 0 && Math.abs(b.x - ship.x) < s * 0.5 && Math.abs(b.y - SY()) < s * 0.4) {
+          b.y = view.h * 2;
+          lives--;
+          hitT = 1.2;
+          if (lives <= 0) return die();
+        }
+      }
+      bombs = bombs.filter(b => b.y < view.h);
+      if (aliens.some(a => a.y > SY() - s)) return die();
+
+      if (!aliens.length) { wave++; buildWave(); }
+      updateHud();
+    }
+
+    function die() {
+      state = 'over';
+      updateHud();
+      const best = W.best('invaders', score);
+      setTimeout(() => W.overlay({ title: 'Invaded!', big: score, text: `Wave ${wave} · best ${best}`, button: 'Again', onStart: start }), 600);
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#05050d';
+      ctx.fillRect(0, 0, w, h);
+      const s = AS();
+      ctx.font = `${Math.round(s)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const a of aliens) ctx.fillText(a.e, a.x, a.y);
+      ctx.fillStyle = '#30d158';
+      for (const b of shots) ctx.fillRect(b.x - 1, b.y - 5, 2, 8);
+      ctx.fillStyle = '#ff453a';
+      for (const b of bombs) { ctx.beginPath(); ctx.arc(b.x, b.y, 2.5, 0, Math.PI * 2); ctx.fill(); }
+      if (state !== 'over' && (hitT <= 0 || Math.floor(hitT * 10) % 2)) { ctx.save(); ctx.translate(ship.x, SY()); ctx.rotate(-Math.PI / 4); ctx.fillText('🚀', 0, 0); ctx.restore(); }  // emoji points up-right
+      for (const p of sparks) {
+        p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+        ctx.fillStyle = `rgba(255,214,10,${Math.max(0, p.t * 2.5)})`;
+        ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
+      }
+      sparks = sparks.filter(p => p.t > 0);
+    }
+
+    const setX = x => { if (ship) ship.x = W.clamp(x, AS() * 0.5, view.w - AS() * 0.5); };
+    W.pointer(canvas, { down: p => setX(p.x), move: p => setX(p.x) });
+    W.crown(d => setX(ship.x + d * 0.8));
+    const keys = {};
+    window.addEventListener('keydown', e => (keys[e.key] = true));
+    window.addEventListener('keyup', e => (keys[e.key] = false));
+
+    function start() {
+      ship = { x: view.w / 2 };
+      score = 0; lives = 3; wave = 1; fireT = 0.3; hitT = 0;
+      buildWave();
+      updateHud();
+      state = 'play';
+    }
+
+    ship = { x: view.w / 2 };
+    wave = 1;
+    buildWave();
+    W.overlay({ title: '👾 Invaders', text: 'Drag or turn the Crown<br>to move. Auto-fire!', onStart: start });
+    W.loop(dt => {
+      if (keys.ArrowLeft) setX(ship.x - view.w * dt);
+      if (keys.ArrowRight) setX(ship.x + view.w * dt);
+      if (state === 'play') update(dt);
+      render(dt);
+    });
+  </script>
+</body>
+</html>
