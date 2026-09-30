@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Mini Sudoku</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 28px 4px max(4px, env(safe-area-inset-bottom)); gap: 5px; }
+    #grid {
+      --size: min(96vw, calc(100vh - 72px));
+      width: var(--size); height: var(--size);
+      display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(6, 1fr);
+      background: #636366; gap: 1px; border: 2px solid #8e8e93; border-radius: 6px; overflow: hidden;
+    }
+    .s { background: #1c1c1e; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: calc(var(--size) / 9); color: #64d2ff; }
+    .s.given { color: #fff; }
+    .s.sel { background: #0a84ff55; }
+    .s.peer { background: #26262a; }
+    .s.bad { color: #ff453a; }
+    .s.c2 { border-right: 2px solid #8e8e93; }
+    .s.r1 { border-bottom: 2px solid #8e8e93; }
+    #pad { display: flex; gap: 3px; width: min(96vw, 260px); }
+    #pad button { flex: 1; border: 0; border-radius: 8px; background: #2c2c2e; color: #fff; font: inherit; font-size: 16px; font-weight: 700; padding: 6px 0; }
+    #pad button:active { background: #48484a; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="grid"></div>
+    <div id="pad"></div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const N = 6, BR = 2, BC = 3;   // 6x6 grid with 2x3 boxes
+    const gridEl = document.getElementById('grid');
+    const padEl = document.getElementById('pad');
+    const hud = document.getElementById('hud');
+    let cells, given, sel = -1, startT, timer, done, mistakes;
+    const els = [];
+
+    const shuffle = a => a.sort(() => Math.random() - 0.5);
+
+    function generate() {
+      // Start from a valid pattern, then shuffle digits, rows within bands, bands, cols within stacks, stacks.
+      const base = (r, c) => (BC * (r % BR) + Math.floor(r / BR) + c) % N;
+      const digits = shuffle([1, 2, 3, 4, 5, 6]);
+      const rows = shuffle([0, 1, 2]).flatMap(b => shuffle([0, 1]).map(r => b * BR + r));
+      const cols = shuffle([0, 1]).flatMap(s => shuffle([0, 1, 2]).map(c => s * BC + c));
+      const sol = [];
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) sol.push(digits[base(rows[r], cols[c])]);
+      return sol;
+    }
+
+    const peers = i => {
+      const r = Math.floor(i / N), c = i % N, out = [];
+      for (let j = 0; j < N * N; j++) {
+        const rr = Math.floor(j / N), cc = j % N;
+        if (j !== i && (rr === r || cc === c || (Math.floor(rr / BR) === Math.floor(r / BR) && Math.floor(cc / BC) === Math.floor(c / BC)))) out.push(j);
+      }
+      return out;
+    };
+
+    function build() {
+      gridEl.innerHTML = '';
+      els.length = 0;
+      for (let i = 0; i < N * N; i++) {
+        const d = document.createElement('div');
+        const r = Math.floor(i / N), c = i % N;
+        d.className = 's' + (c === 2 ? ' c2' : '') + (r % 2 === 1 && r < 5 ? ' r1' : '');
+        d.addEventListener('click', () => { sel = i; draw(); });
+        gridEl.appendChild(d);
+        els.push(d);
+      }
+      padEl.innerHTML = '';
+      for (let n = 1; n <= N; n++) {
+        const b = document.createElement('button');
+        b.textContent = n;
+        b.addEventListener('click', () => enter(n));
+        padEl.appendChild(b);
+      }
+      const x = document.createElement('button');
+      x.textContent = '⌫';
+      x.addEventListener('click', () => enter(0));
+      padEl.appendChild(x);
+    }
+
+    function enter(n) {
+      if (done || sel < 0 || given[sel]) return;
+      cells[sel] = n;
+      if (n && peers(sel).some(j => cells[j] === n)) mistakes++;
+      draw();
+      if (cells.every((v, i) => v && !peers(i).some(j => cells[j] === v))) {
+        done = true;
+        clearInterval(timer);
+        const secs = Math.round((Date.now() - startT) / 1000);
+        const best = W.best('sudoku', secs, true);
+        setTimeout(() => W.overlay({ title: 'Solved! 🧠', big: secs + 's', text: `Best ${best}s`, button: 'New puzzle', onStart: start }), 400);
+      }
+    }
+
+    function draw() {
+      const ps = sel >= 0 ? peers(sel) : [];
+      cells.forEach((v, i) => {
+        const e = els[i];
+        e.textContent = v || '';
+        e.classList.toggle('given', given[i]);
+        e.classList.toggle('sel', i === sel);
+        e.classList.toggle('peer', ps.includes(i));
+        e.classList.toggle('bad', !!v && peers(i).some(j => cells[j] === v));
+      });
+      hud.innerHTML = `${Math.round((Date.now() - startT) / 1000)}s`;
+    }
+
+    function start() {
+      const sol = generate();
+      const blanks = new Set(shuffle([...Array(N * N).keys()]).slice(0, 18));
+      cells = sol.map((v, i) => (blanks.has(i) ? 0 : v));
+      given = cells.map(Boolean);
+      sel = cells.indexOf(0);
+      done = false; mistakes = 0;
+      startT = Date.now();
+      clearInterval(timer);
+      timer = setInterval(draw, 1000);
+      draw();
+    }
+
+    build();
+    start();
+  </script>
+</body>
+</html>
