@@ -68,16 +68,17 @@ window.GAMES = [
   { id: 'cookie', name: 'Cookie Clicker', emoji: '🍪', color: '#c48a50', desc: 'Tap or spin the Crown to bake' },
   { id: 'bubbles', name: 'Bubble Shooter', emoji: '🫧', color: '#0a84ff', desc: 'Match 3 — Crown aims' },
   { id: 'pet', name: 'Pocket Pet', emoji: '🐣', color: '#ffd60a', desc: 'Raise a pet that grows over days' },
+  { id: 'lander', name: 'Lunar Lander', emoji: '🌕', color: '#8e8e93', desc: 'Crown tilts, hold to thrust' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
 window.CATEGORIES = {
   Arcade: ['snakeio', 'blobio', 'flappy', 'stack', 'dino', 'knife', 'colorswitch', 'invaders', 'fruit', 'dodge', 'cave', 'hop',
-    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles'],
+    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander'],
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps'],
   Sports: ['golf', 'hoops', 'bowling', 'darts'],
   Fun: ['eightball', 'slots', 'cookie', 'plinko', 'pet'],
 };
-window.CROWN = ['pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];
+window.CROWN = ['lander', 'pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];

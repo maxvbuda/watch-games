@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Lunar Lander</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+
+    let ship, ground, pad, fuel, thrust = false, level = 1, total = 0, state = 'ready', flames = [], boom = null;
+    const G = () => view.h * 0.09;   // moon gravity, px/s²
+
+    function makeGround() {
+      const pts = [], n = 24, padW = Math.max(3, 6 - Math.floor(level / 2));
+      const padAt = W.randInt(2, n - padW - 2);
+      let y = view.h * 0.8;
+      for (let i = 0; i <= n; i++) {
+        if (i > padAt && i <= padAt + padW) { pts.push(pts[pts.length - 1]); continue; }   // flat landing pad
+        y = W.clamp(y + W.rand(-1, 1) * view.h * 0.08 * (1 + level * 0.1), view.h * 0.55, view.h * 0.95);
+        pts.push(y);
+      }
+      ground = pts.map((y, i) => [i * view.w / n, y]);
+      pad = { x1: ground[padAt][0], x2: ground[padAt + padW][0], y: ground[padAt][1] };
+    }
+
+    function newLevel() {
+      makeGround();
+      ship = { x: view.w * W.rand(0.2, 0.8), y: 40, vx: W.rand(-15, 15), vy: 0, a: 0 };
+      fuel = 100;
+      boom = null;
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `${total}<small>L${level} · ⛽${Math.ceil(fuel)}</small>`; }
+
+    function groundY(x) {
+      for (let i = 1; i < ground.length; i++) if (x <= ground[i][0]) {
+        const [x0, y0] = ground[i - 1], [x1, y1] = ground[i];
+        return y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+      }
+      return view.h;
+    }
+
+    function update(dt) {
+      if (thrust && fuel > 0) {
+        const f = G() * 2.4;
+        ship.vx += Math.sin(ship.a) * f * dt;
+        ship.vy -= Math.cos(ship.a) * f * dt;
+        fuel = Math.max(0, fuel - 14 * dt);
+        flames.push({ x: ship.x - Math.sin(ship.a) * 8, y: ship.y + Math.cos(ship.a) * 8, vx: -Math.sin(ship.a) * 60 + W.rand(-15, 15), vy: Math.cos(ship.a) * 60, t: 0.3 });
+      }
+      ship.vy += G() * dt;
+      ship.x += ship.vx * dt; ship.y += ship.vy * dt;
+      if (ship.x < 0) ship.x += view.w;
+      if (ship.x > view.w) ship.x -= view.w;
+      updateHud();
+
+      const gy = groundY(ship.x);
+      if (ship.y + 7 >= gy) {
+        const onPad = ship.x - 5 > pad.x1 && ship.x + 5 < pad.x2;
+        const soft = ship.vy < view.h * 0.12 && Math.abs(ship.vx) < view.h * 0.06 && Math.abs(ship.a) < 0.25;
+        ship.y = gy - 7;
+        if (onPad && soft) {
+          state = 'landed';
+          const pts = Math.round(50 + fuel * 2 + (0.25 - Math.abs(ship.a)) * 100);
+          total += pts;
+          W.best('lander', total);
+          updateHud();
+          setTimeout(() => W.overlay({ title: 'The Eagle has landed! 🌕', big: '+' + pts, text: `Total ${total}`, button: 'Next level', onStart: () => { level++; newLevel(); state = 'play'; } }), 500);
+        } else {
+          state = 'over';
+          boom = { x: ship.x, y: ship.y, t: 0 };
+          const best = W.best('lander', total);
+          const why = !onPad ? 'Missed the pad' : Math.abs(ship.a) >= 0.25 ? 'Not level' : 'Too fast';
+          setTimeout(() => W.overlay({ title: `💥 ${why}!`, big: total, text: `Reached level ${level} · best ${best}`, button: 'Again', onStart: start }), 900);
+        }
+      }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#ffffff66';
+      for (let i = 0; i < 30; i++) ctx.fillRect((i * 67.3) % w, (i * 41.7) % (h * 0.6), 1, 1);
+      if (ground) {
+        ctx.fillStyle = '#3a3a3c';
+        ctx.beginPath(); ctx.moveTo(0, h);
+        for (const [x, y] of ground) ctx.lineTo(x, y);
+        ctx.lineTo(w, h); ctx.fill();
+        ctx.strokeStyle = '#8e8e93'; ctx.lineWidth = 1;
+        ctx.beginPath(); ground.forEach(([x, y], i) => ctx[i ? 'lineTo' : 'moveTo'](x, y)); ctx.stroke();
+        ctx.fillStyle = '#30d158';
+        ctx.fillRect(pad.x1, pad.y - 2, pad.x2 - pad.x1, 3);
+      }
+      for (const f of flames) { f.t -= dt; f.x += f.vx * dt; f.y += f.vy * dt; ctx.fillStyle = `rgba(255,${150 + Math.random() * 100},0,${Math.max(0, f.t * 3)})`; ctx.fillRect(f.x - 1.5, f.y - 1.5, 3, 3); }
+      flames = flames.filter(f => f.t > 0);
+      if (ship && !boom) {
+        ctx.save(); ctx.translate(ship.x, ship.y); ctx.rotate(ship.a);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(0, -2, 5, Math.PI, 0); ctx.lineTo(5, 3); ctx.lineTo(-5, 3); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-4, 3); ctx.lineTo(-7, 7); ctx.moveTo(4, 3); ctx.lineTo(7, 7); ctx.stroke();
+        ctx.restore();
+        // Velocity readout: green when safe to land.
+        const safeV = ship.vy < view.h * 0.12 && Math.abs(ship.vx) < view.h * 0.06, safeA = Math.abs(ship.a) < 0.25;
+        ctx.font = '600 10px -apple-system, system-ui'; ctx.textAlign = 'left';
+        ctx.fillStyle = safeV ? '#30d158' : '#ff453a';
+        ctx.fillText(`↓${Math.round(ship.vy)} →${Math.round(ship.vx)}`, 36, 20);
+        ctx.fillStyle = safeA ? '#30d158' : '#ff453a';
+        ctx.fillText(`∠${Math.round(ship.a * 57.3)}°`, 36, 32);
+      }
+      if (boom) {
+        boom.t += dt;
+        ctx.font = `${Math.round(20 + boom.t * 20)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.globalAlpha = Math.max(0, 1 - boom.t); ctx.fillText('💥', boom.x, boom.y); ctx.globalAlpha = 1;
+      }
+    }
+
+    // Hold anywhere to fire the engine. Rotate with the Crown, or hold on the left/right edges.
+    let edge = 0;
+    W.pointer(canvas, {
+      down: p => { thrust = true; edge = p.x < view.w * 0.2 ? -1 : p.x > view.w * 0.8 ? 1 : 0; },
+      move: p => { edge = p.x < view.w * 0.2 ? -1 : p.x > view.w * 0.8 ? 1 : 0; },
+      up: () => { thrust = false; edge = 0; },
+    });
+    W.crown(d => { if (state === 'play') ship.a = W.clamp(ship.a + d * 0.01, -1.4, 1.4); });
+    const keys = {};
+    window.addEventListener('keydown', e => { keys[e.key] = true; if (e.key === ' ' || e.key === 'ArrowUp') thrust = true; });
+    window.addEventListener('keyup', e => { keys[e.key] = false; if (e.key === ' ' || e.key === 'ArrowUp') thrust = false; });
+
+    function start() { level = 1; total = 0; newLevel(); state = 'play'; }
+    newLevel();
+    W.overlay({ title: '🚀 Lunar Lander', text: 'Hold to thrust. Turn the<br>Crown (or hold the edges)<br>to tilt. Land softly on 🟩', onStart: start });
+    W.loop(dt => {
+      if (ship) {
+        if (edge) ship.a = W.clamp(ship.a + edge * 1.5 * dt, -1.4, 1.4);
+        if (keys.ArrowLeft) ship.a = W.clamp(ship.a - 1.5 * dt, -1.4, 1.4);
+        if (keys.ArrowRight) ship.a = W.clamp(ship.a + 1.5 * dt, -1.4, 1.4);
+      }
+      if (state === 'play') update(dt);
+      render(dt);
+    });
+  </script>
+</body>
+</html>
