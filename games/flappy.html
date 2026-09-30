@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Flappy Dot</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+
+    let bird, pipes, score, state = 'ready', spawnX, t = 0;
+
+    // Physics scale with screen height so it plays the same on every watch size.
+    const G = () => view.h * 3.4;
+    const FLAP = () => -view.h * 1.05;
+    const GAP = () => view.h * 0.37;
+    const SPEED = () => view.w * 0.55;
+    const PIPE_W = () => view.w * 0.2;
+    const R = () => view.h * 0.045;
+
+    function reset() {
+      bird = { x: view.w * 0.3, y: view.h * 0.45, vy: 0 };
+      pipes = [];
+      score = 0;
+      spawnX = view.w + 20;
+      hud.textContent = '0';
+    }
+
+    function flap() {
+      if (state === 'play') bird.vy = FLAP();
+    }
+
+    function addPipe(x) {
+      const margin = view.h * 0.12;
+      const top = W.rand(margin, view.h - margin - GAP());
+      pipes.push({ x, top, passed: false });
+    }
+
+    function update(dt) {
+      bird.vy += G() * dt;
+      bird.y += bird.vy * dt;
+
+      const sp = SPEED() * (1 + Math.min(score, 30) * 0.01);
+      for (const p of pipes) p.x -= sp * dt;
+      if (!pipes.length || pipes[pipes.length - 1].x < view.w - view.w * 0.62) addPipe(view.w + 10);
+      if (pipes.length && pipes[0].x < -PIPE_W()) pipes.shift();
+
+      const r = R();
+      for (const p of pipes) {
+        if (!p.passed && p.x + PIPE_W() < bird.x) {
+          p.passed = true;
+          score++;
+          hud.textContent = score;
+        }
+        const inX = bird.x + r * 0.8 > p.x && bird.x - r * 0.8 < p.x + PIPE_W();
+        const inGap = bird.y - r * 0.8 > p.top && bird.y + r * 0.8 < p.top + GAP();
+        if (inX && !inGap) return die();
+      }
+      if (bird.y + r > view.h || bird.y - r < -r * 3) die();
+    }
+
+    function die() {
+      state = 'over';
+      const best = W.best('flappy', score);
+      setTimeout(() => W.overlay({ title: 'Splat!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 400);
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const sky = ctx.createLinearGradient(0, 0, 0, h);
+      sky.addColorStop(0, '#0a1a3a');
+      sky.addColorStop(1, '#1d3d6b');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, w, h);
+
+      // Parallax stars.
+      t += dt;
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      for (let i = 0; i < 18; i++) {
+        const x = ((i * 53.7 - t * 12) % w + w) % w;
+        const y = (i * 37.3) % (h * 0.7);
+        ctx.fillRect(x, y, 1.2, 1.2);
+      }
+
+      const pw = PIPE_W(), gap = GAP();
+      for (const p of pipes) {
+        ctx.fillStyle = '#30d158';
+        ctx.fillRect(p.x, 0, pw, p.top);
+        ctx.fillRect(p.x, p.top + gap, pw, h - p.top - gap);
+        ctx.fillStyle = '#248a3d';
+        ctx.fillRect(p.x - 3, p.top - 8, pw + 6, 8);
+        ctx.fillRect(p.x - 3, p.top + gap, pw + 6, 8);
+      }
+
+      const r = R();
+      const tilt = W.clamp(bird.vy / (view.h * 2), -0.5, 1.2);
+      ctx.save();
+      ctx.translate(bird.x, bird.y);
+      ctx.rotate(tilt);
+      ctx.fillStyle = '#ffd60a';
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff9f0a';
+      ctx.beginPath(); ctx.moveTo(r * 0.7, -r * 0.2); ctx.lineTo(r * 1.5, r * 0.1); ctx.lineTo(r * 0.7, r * 0.4); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(r * 0.35, -r * 0.35, r * 0.32, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.arc(r * 0.45, -r * 0.35, r * 0.15, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    function start() {
+      reset();
+      state = 'play';
+      flap();
+    }
+
+    W.pointer(canvas, { down: flap });
+    window.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'ArrowUp') flap(); });
+
+    reset();
+    W.overlay({ title: '🐤 Flappy Dot', text: 'Tap to flap.<br>Fly through the gaps.', onStart: start });
+
+    W.loop(dt => {
+      if (state === 'play') update(dt);
+      render(dt);
+    });
+  </script>
+</body>
+</html>
