@@ -3,4 +3,5 @@ window.GAMES = [
   { id: 'snakeio', name: 'Snake.io', emoji: '🐍', color: '#30d158', desc: 'Eat, grow, cut them off' },
   { id: 'flappy', name: 'Flappy Dot', emoji: '🐤', color: '#ffd60a', desc: 'Tap to fly through gaps' },
   { id: '2048', name: '2048', emoji: '🔢', color: '#ff9f0a', desc: 'Swipe to merge tiles' },
+  { id: 'stack', name: 'Stack', emoji: '🧱', color: '#bf5af2', desc: 'Tap to build a tower' },
 ];

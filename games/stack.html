@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Stack</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+
+    let blocks, moving, falling, camY, state = 'ready', hue0, perfect;
+    const BH = () => view.h * 0.075;
+
+    function reset() {
+      const w = view.w * 0.6;
+      hue0 = W.randInt(0, 360);
+      blocks = [{ x: (view.w - w) / 2, w, hue: hue0 }];
+      falling = [];
+      camY = 0;
+      perfect = 0;
+      spawn();
+      hud.textContent = '0';
+    }
+
+    function spawn() {
+      const top = blocks[blocks.length - 1];
+      const n = blocks.length;
+      const dir = n % 2 ? 1 : -1;
+      moving = {
+        x: dir > 0 ? -top.w : view.w,
+        w: top.w,
+        dir,
+        speed: view.w * (0.75 + Math.min(n, 40) * 0.025),
+        hue: (hue0 + n * 8) % 360,
+      };
+    }
+
+    function drop() {
+      if (state !== 'play') return;
+      const top = blocks[blocks.length - 1];
+      const left = Math.max(moving.x, top.x);
+      const right = Math.min(moving.x + moving.w, top.x + top.w);
+      const overlap = right - left;
+      if (overlap <= 0) {
+        falling.push({ x: moving.x, w: moving.w, y: blocks.length, vy: 0, hue: moving.hue });
+        moving = null;
+        return gameOver();
+      }
+      // Near-perfect drops snap into place and reward a streak.
+      if (Math.abs(moving.x - top.x) < view.w * 0.02) {
+        blocks.push({ x: top.x, w: top.w, hue: moving.hue, flash: 1 });
+        perfect++;
+        if (perfect >= 3) {  // Streak bonus: grow the block a little.
+          const b = blocks[blocks.length - 1];
+          const grow = Math.min(view.w * 0.04, view.w * 0.6 - b.w);
+          b.x -= grow / 2; b.w += grow;
+        }
+      } else {
+        perfect = 0;
+        blocks.push({ x: left, w: overlap, hue: moving.hue });
+        const cutX = moving.x < top.x ? moving.x : right;
+        falling.push({ x: cutX, w: moving.w - overlap, y: blocks.length - 1, vy: 0, hue: moving.hue });
+      }
+      hud.textContent = blocks.length - 1;
+      spawn();
+    }
+
+    function gameOver() {
+      state = 'over';
+      const score = blocks.length - 1;
+      const best = W.best('stack', score);
+      setTimeout(() => W.overlay({ title: 'Toppled', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 700);
+    }
+
+    function update(dt) {
+      if (moving) {
+        moving.x += moving.dir * moving.speed * dt;
+        if (moving.x + moving.w > view.w + moving.w * 0.3 && moving.dir > 0) moving.dir = -1;
+        if (moving.x < -moving.w * 0.3 && moving.dir < 0) moving.dir = 1;
+      }
+    }
+
+    function yFor(level) {
+      // Screen y of the top of the block at `level`, with the camera.
+      return view.h * 0.75 - level * BH() + camY;
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const topHue = (hue0 + blocks.length * 8) % 360;
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, `hsl(${topHue},35%,14%)`);
+      g.addColorStop(1, `hsl(${(topHue + 40) % 360},35%,6%)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+
+      // Camera follows the tower.
+      const wantCam = Math.max(0, (blocks.length - 4)) * BH();
+      camY += (wantCam - camY) * Math.min(1, dt * 6);
+
+      const bh = BH();
+      blocks.forEach((b, i) => {
+        const y = yFor(i);
+        if (y > h + bh) return;
+        ctx.fillStyle = `hsl(${b.hue},70%,${55 + (b.flash || 0) * 30}%)`;
+        ctx.fillRect(b.x, y, b.w, bh);
+        ctx.fillStyle = `hsla(${b.hue},70%,30%,0.6)`;
+        ctx.fillRect(b.x, y + bh - 3, b.w, 3);
+        if (b.flash) b.flash = Math.max(0, b.flash - dt * 3);
+      });
+      // Ground below the base block.
+      ctx.fillStyle = `hsl(${hue0},30%,22%)`;
+      ctx.fillRect(0, yFor(-1), w, h);
+
+      if (moving) {
+        const y = yFor(blocks.length);
+        ctx.fillStyle = `hsl(${moving.hue},70%,55%)`;
+        ctx.fillRect(moving.x, y, moving.w, bh);
+      }
+
+      for (let i = falling.length - 1; i >= 0; i--) {
+        const f = falling[i];
+        f.vy += h * 3 * dt;
+        f.drop = (f.drop || 0) + f.vy * dt;
+        const y = yFor(f.y) + f.drop;
+        ctx.fillStyle = `hsla(${f.hue},70%,55%,0.8)`;
+        ctx.fillRect(f.x, y, f.w, bh);
+        if (y > h) falling.splice(i, 1);
+      }
+
+      if (perfect >= 2 && state === 'play') {
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.font = `700 ${Math.round(h * 0.06)}px -apple-system, system-ui`;
+        ctx.textAlign = 'center';
+        ctx.fillText(`Perfect ×${perfect}`, w / 2, h * 0.2);
+      }
+    }
+
+    function start() {
+      reset();
+      state = 'play';
+    }
+
+    W.pointer(canvas, { down: drop });
+    window.addEventListener('keydown', e => { if (e.key === ' ') drop(); });
+
+    reset();
+    W.overlay({ title: '🧱 Stack', text: 'Tap to drop the block.<br>Line it up perfectly!', onStart: start });
+
+    W.loop(dt => {
+      if (state === 'play') update(dt);
+      render(dt);
+    });
+  </script>
+</body>
+</html>
