@@ -80,7 +80,7 @@
       return {
         x: p.x + nx * side * 16, y: p.y + ny * side * 16, a: p.a, v: 0, idx: back, laps: -1, check: true,
         color: COLORS[i], name: NAMES[i], ai: i > 0, item: null, rolling: 0, spin: 0, boost: 0, shield: 0,
-        skill: 0.86 + Math.random() * 0.1, lane: W.rand(-0.5, 0.5), itemT: 0, done: false,   // skill < 1: rivals top out a bit below you
+        skill: 0.84 + Math.random() * 0.1, lane: W.rand(-0.5, 0.5), itemT: 0, done: false,   // skill < 1: rivals top out a bit below you
       };
     }
 
@@ -178,7 +178,7 @@
       // Everyone auto-accelerates; sand slows you down; boosts go fast.
       // Gentle catch-up: rivals far ahead of you ease off, rivals far behind push a little harder.
       let band = 1;
-      if (c.ai && !me.done) band = W.clamp(1 - (progress(c) - progress(me)) / N * 0.7, 0.78, 1.08);
+      if (c.ai && !me.done) band = W.clamp(1 - (progress(c) - progress(me)) / N * 0.7, 0.78, 1);
       const top = (onTrack ? 150 : 112) * (c.ai ? c.skill * band : 1) * (c.boost > 0 ? 1.55 : 1) * (c.done && !c.ai ? 0.4 : 1);
       if (state === 'race' && c.spin <= 0) c.v += (top - c.v) * Math.min(1, dt * (c.v < top ? 1.1 : 2.5));
       c.x += Math.cos(c.a) * c.v * dt;
