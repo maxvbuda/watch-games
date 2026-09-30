@@ -215,7 +215,7 @@
     W.pointer(canvas, { down: setSteer, move: setSteer, hover: true });
 
     // Digital Crown: every pixel scrolled rotates your heading. Scroll down = clockwise.
-    const CROWN_TURN = 0.016;  // radians per scrolled pixel
+    const CROWN_TURN = 0.006;  // radians per scrolled pixel (matches Snake.io)
     const MID = 100000;
     let lastScroll = MID;
     window.scrollTo(0, MID);
