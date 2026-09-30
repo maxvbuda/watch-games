@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Battleship</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 28px 4px max(4px, env(safe-area-inset-bottom)); gap: 3px; }
+    #msg { font-size: 11px; color: var(--muted); height: 14px; text-align: center; }
+    #grid {
+      --size: min(96vw, calc(100vh - 50px));
+      width: var(--size); height: var(--size);
+      display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(6, 1fr); gap: 2px;
+      background: #0a2a4a; padding: 2px; border-radius: 8px;
+    }
+    .sq { background: #0f4c81; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: calc(var(--size) / 9); }
+    .sq.miss { background: #0a3a66; }
+    .sq.hit { background: #ff9f0a; }
+    .sq.sunk { background: #ff453a; }
+    .sq.mine { outline: 2px solid #30d158; outline-offset: -2px; }
+    .sq.mine.hit { background: #ff453a; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="msg"></div>
+    <div id="grid"></div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const N = 6, SHIPS = [3, 2, 2];
+    const $ = id => document.getElementById(id);
+    let enemy, mine, shots, aiShots, aiQueue, busy, done, view = 'enemy', wins = 0;
+    const els = [];
+
+    function placeFleet() {
+      const ships = [], taken = new Set();
+      for (const len of SHIPS) {
+        for (;;) {
+          const horiz = Math.random() < 0.5;
+          const x = W.randInt(0, horiz ? N - len : N - 1), y = W.randInt(0, horiz ? N - 1 : N - len);
+          const cells = Array.from({ length: len }, (_, i) => (horiz ? y * N + x + i : (y + i) * N + x));
+          if (cells.some(c => taken.has(c))) continue;
+          cells.forEach(c => taken.add(c));
+          ships.push({ cells, hits: new Set() });
+          break;
+        }
+      }
+      return ships;
+    }
+    const shipAt = (fleet, c) => fleet.find(s => s.cells.includes(c));
+    const sunk = s => s.hits.size === s.cells.length;
+    const alive = fleet => fleet.filter(s => !sunk(s)).length;
+
+    for (let i = 0; i < N * N; i++) {
+      const d = document.createElement('div');
+      d.className = 'sq';
+      d.addEventListener('click', () => fire(i));
+      $('grid').appendChild(d);
+      els.push(d);
+    }
+
+    function draw() {
+      const showMine = view === 'mine';
+      els.forEach((e, i) => {
+        e.className = 'sq';
+        e.textContent = '';
+        if (showMine) {
+          const s = shipAt(mine, i);
+          if (s) { e.classList.add('mine'); e.textContent = '🚢'; }
+          if (aiShots.has(i)) { e.classList.add(s ? 'hit' : 'miss'); if (s) e.textContent = '💥'; else e.textContent = '·'; }
+        } else if (shots.has(i)) {
+          const s = shipAt(enemy, i);
+          if (!s) { e.classList.add('miss'); e.textContent = '·'; }
+          else { e.classList.add(sunk(s) ? 'sunk' : 'hit'); e.textContent = '💥'; }
+        }
+      });
+      $('hud').innerHTML = `🎯${alive(enemy)} 🚢${alive(mine)}<small>ships left</small>`;
+    }
+
+    function fire(i) {
+      if (busy || done || view !== 'enemy' || shots.has(i)) return;
+      shots.add(i);
+      const s = shipAt(enemy, i);
+      if (s) s.hits.add(i);
+      $('msg').textContent = s ? (sunk(s) ? 'Sunk! 🔥' : 'Hit!') : 'Miss';
+      draw();
+      if (!alive(enemy)) return finish(true);
+      busy = true;
+      setTimeout(aiTurn, 600);
+    }
+
+    // AI: hunt randomly (checkerboard), then target around hits.
+    function aiTurn() {
+      let c;
+      while (aiQueue.length && aiShots.has(aiQueue[0])) aiQueue.shift();
+      if (aiQueue.length) c = aiQueue.shift();
+      else {
+        const free = [...Array(N * N).keys()].filter(i => !aiShots.has(i) && (Math.floor(i / N) + i) % 2 === 0);
+        c = W.pick(free.length ? free : [...Array(N * N).keys()].filter(i => !aiShots.has(i)));
+      }
+      aiShots.add(c);
+      const s = shipAt(mine, c);
+      if (s) {
+        s.hits.add(c);
+        const x = c % N, y = Math.floor(c / N);
+        if (!sunk(s)) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy;
+          if (nx >= 0 && ny >= 0 && nx < N && ny < N) aiQueue.unshift(ny * N + nx);
+        }
+      }
+      // Briefly flip to your board to show the watch's shot.
+      view = 'mine';
+      $('msg').textContent = s ? (sunk(s) ? 'Watch sank your ship! 😱' : 'Watch hit you!') : 'Watch missed';
+      draw();
+      setTimeout(() => {
+        if (!alive(mine)) return finish(false);
+        view = 'enemy'; busy = false;
+        $('msg').textContent = 'Your shot';
+        draw();
+      }, 900);
+    }
+
+    function finish(won) {
+      done = true;
+      if (won) { wins++; W.best('battleship', wins); }
+      view = won ? 'enemy' : 'mine';
+      draw();
+      setTimeout(() => W.overlay({ title: won ? 'Fleet destroyed! 🎉' : 'You were sunk 🌊', big: `${shots.size} shots`, button: 'Again', onStart: start }), 800);
+    }
+
+    function start() {
+      enemy = placeFleet(); mine = placeFleet();
+      shots = new Set(); aiShots = new Set(); aiQueue = [];
+      busy = false; done = false; view = 'enemy';
+      $('msg').textContent = 'Tap to fire at the watch';
+      draw();
+    }
+    start();
+    W.overlay({ title: '🚢 Battleship', text: 'Find the watch\'s 3 ships<br>before it finds yours!', onStart() {} });
+  </script>
+</body>
+</html>

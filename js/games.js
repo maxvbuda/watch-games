@@ -56,4 +56,5 @@ window.GAMES = [
   { id: 'dots', name: 'Dots & Boxes', emoji: '🔲', color: '#30d158', desc: 'Claim more boxes than the watch' },
   { id: 'pig', name: 'Pig Dice', emoji: '🐷', color: '#ff9fb4', desc: 'Push your luck to 50' },
   { id: 'sokoban', name: 'Box Push', emoji: '📦', color: '#8e5a3c', desc: 'Sokoban: 6 puzzle levels' },
+  { id: 'battleship', name: 'Battleship', emoji: '🚢', color: '#0f4c81', desc: 'Sink the watch’s fleet' },
 ];
