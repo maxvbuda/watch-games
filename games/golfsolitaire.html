@@ -69,7 +69,7 @@
       $('pile').innerHTML = `${RANKS[p.v]}<span style="font-size:13px">${p.s}</span>`;
       $('stock').textContent = stock.length || '';
       $('stock').disabled = !stock.length;
-      $('hud').innerHTML = `${left()}<small>cards left</small>`;
+      $('hud').innerHTML = `${left()} left`;
     }
 
     function play(ci, el) {
