@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Whack-a-Mole</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    body.game { background: #1a2e12; }
+    #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 26px; }
+    #field {
+      --size: min(96vw, calc(100vh - 32px));
+      width: var(--size);
+      height: var(--size);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+    }
+    .hole {
+      position: relative;
+      overflow: hidden;
+      border-radius: 50% 50% 45% 45% / 30% 30% 70% 70%;
+      background: radial-gradient(ellipse at 50% 80%, #0b0703 45%, #3b2716 47%, #2a4d1e 70%);
+    }
+    .mole {
+      position: absolute;
+      left: 12%;
+      right: 12%;
+      bottom: -80%;
+      height: 78%;
+      font-size: calc(var(--size) / 5.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: bottom 0.12s ease-out;
+      pointer-events: none;
+    }
+    .hole.up .mole { bottom: 8%; }
+    .hole.hit .mole { transform: scale(0.8) rotate(-15deg); filter: brightness(1.6); }
+    #timer { position: absolute; left: 38px; right: 60px; top: max(14px, env(safe-area-inset-top)); height: 5px; border-radius: 3px; background: #ffffff22; overflow: hidden; }
+    #timer div { height: 100%; background: #30d158; width: 100%; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="field"></div></div>
+  <div id="timer"><div id="bar"></div></div>
+  <div class="hud" id="hud">0</div>
+  <script src="../js/common.js"></script>
+  <script>
+    const field = document.getElementById('field');
+    const hud = document.getElementById('hud');
+    const bar = document.getElementById('bar');
+    const DURATION = 30;
+    const holes = [];
+    let score, timeLeft, playing = false, spawnT, elapsed;
+
+    for (let i = 0; i < 9; i++) {
+      const h = document.createElement('div');
+      h.className = 'hole';
+      h.innerHTML = '<div class="mole"></div>';
+      const state = { el: h, mole: h.firstChild, kind: null, ttl: 0 };
+      const hit = e => { e.preventDefault(); whack(state); };
+      h.addEventListener('touchstart', hit, { passive: false });
+      h.addEventListener('mousedown', hit);
+      field.appendChild(h);
+      holes.push(state);
+    }
+
+    function whack(h) {
+      if (!playing || !h.kind || h.el.classList.contains('hit')) return;
+      if (h.kind === 'bomb') {
+        timeLeft = Math.max(0, timeLeft - 5);
+        document.body.style.background = '#5a1010';
+        setTimeout(() => (document.body.style.background = ''), 150);
+      } else {
+        score += h.kind === 'gold' ? 5 : 1;
+        hud.textContent = score;
+      }
+      h.el.classList.add('hit');
+      h.ttl = Math.min(h.ttl, 0.15);
+    }
+
+    function popUp() {
+      const free = holes.filter(h => !h.kind);
+      if (!free.length) return;
+      const h = W.pick(free);
+      const r = Math.random();
+      h.kind = r < 0.12 ? 'bomb' : r < 0.2 ? 'gold' : 'mole';
+      h.mole.textContent = h.kind === 'bomb' ? '💣' : h.kind === 'gold' ? '🌟' : '🐹';
+      // Moles get quicker as time goes on.
+      h.ttl = W.rand(0.6, 1.1) * (1 - Math.min(elapsed / DURATION, 1) * 0.45);
+      h.el.classList.remove('hit');
+      h.el.classList.add('up');
+    }
+
+    function update(dt) {
+      if (!playing) return;
+      elapsed += dt;
+      timeLeft -= dt;
+      bar.style.width = Math.max(0, (timeLeft / DURATION) * 100) + '%';
+      bar.style.background = timeLeft < 8 ? '#ff453a' : '#30d158';
+
+      spawnT -= dt;
+      if (spawnT <= 0) {
+        popUp();
+        if (elapsed > 10 && Math.random() < 0.35) popUp();
+        spawnT = W.rand(0.35, 0.7) * (1 - Math.min(elapsed / DURATION, 1) * 0.4);
+      }
+      for (const h of holes) {
+        if (!h.kind) continue;
+        h.ttl -= dt;
+        if (h.ttl <= 0) { h.kind = null; h.el.classList.remove('up'); }
+      }
+      if (timeLeft <= 0) end();
+    }
+
+    function end() {
+      playing = false;
+      holes.forEach(h => { h.kind = null; h.el.classList.remove('up', 'hit'); });
+      const best = W.best('whack', score);
+      W.overlay({ title: "Time's up!", big: score, text: `Best ${best}`, button: 'Again', onStart: start });
+    }
+
+    function start() {
+      score = 0;
+      timeLeft = DURATION;
+      elapsed = 0;
+      spawnT = 0.4;
+      hud.textContent = '0';
+      playing = true;
+    }
+
+    W.overlay({ title: '🐹 Whack-a-Mole', text: '30 seconds. 🐹 = 1, 🌟 = 5.<br>Avoid 💣 (−5 sec)!', onStart: start });
+    W.loop(update);
+  </script>
+</body>
+</html>
