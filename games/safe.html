@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Safe Cracker</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const N = 40, TAU = Math.PI * 2;
+
+    // Turn the dial. It glows hotter near the right number; rest on it to lock that digit in.
+    let dial, combo, step, holdT, startT, state = 'ready', audio, lastTick = -1, flash = 0, safes = 0;
+
+    function click(freq, dur = 0.03, vol = 0.12) {
+      try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.type = 'square'; o.frequency.value = freq;
+        g.gain.setValueAtTime(vol, audio.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + dur);
+        o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + dur);
+      } catch (e) {}
+    }
+
+    const num = () => ((Math.round(dial) % N) + N) % N;
+    const dist = (a, b) => { const d = Math.abs(a - b) % N; return Math.min(d, N - d); };
+
+    function newSafe() {
+      combo = [];
+      while (combo.length < 3) { const n = W.randInt(0, N - 1); if (!combo.includes(n)) combo.push(n); }
+      step = 0; holdT = 0; dial = 0; startT = performance.now();
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `${safes}<small>safes cracked</small>`; }
+
+    function turnBy(d) {
+      if (state !== 'play') return;
+      dial += d;
+      holdT = 0;
+      const n = num();
+      if (n !== lastTick) {
+        lastTick = n;
+        // Clicks get louder and higher-pitched near the target.
+        const closeness = 1 - dist(n, combo[step]) / (N / 2);
+        click(300 + closeness * 700, 0.02, 0.04 + closeness * 0.12);
+      }
+    }
+
+    function update(dt) {
+      holdT += dt;
+      if (num() === combo[step] && holdT > 0.7) {
+        step++; holdT = 0; flash = 0.4;
+        click(1200, 0.12, 0.2);
+        if (step === 3) {
+          safes++;
+          const secs = ((performance.now() - startT) / 1000).toFixed(1);
+          W.best('safe', safes);
+          updateHud();
+          state = 'open';
+          setTimeout(() => W.overlay({ title: 'Safe open! 💰', big: secs + 's', text: `${safes} cracked this session`, button: 'Next safe', onStart: () => { newSafe(); state = 'play'; } }), 500);
+        }
+      }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, w, h);
+      const cx = w / 2, cy = h / 2 + 14, R = Math.min(w, h - 40) * 0.42;
+      const heat = combo && step < 3 ? 1 - dist(num(), combo[step]) / (N / 2) : 0;
+      // Glow ring shows how close you are.
+      ctx.strokeStyle = `hsl(${220 - heat * 220}, 90%, ${35 + heat * 25}%)`;
+      ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.arc(cx, cy, R + 5, 0, TAU); ctx.stroke();
+      const g = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.3, R * 0.1, cx, cy, R);
+      g.addColorStop(0, '#6e6e73'); g.addColorStop(1, '#2c2c2e');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill();
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(-dial / N * TAU);
+      ctx.fillStyle = '#e5e5ea'; ctx.strokeStyle = '#e5e5ea';
+      ctx.font = `700 ${Math.round(R * 0.13)}px -apple-system, system-ui`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (let i = 0; i < N; i++) {
+        const a = i / N * TAU - Math.PI / 2;
+        ctx.lineWidth = i % 5 === 0 ? 2 : 1;
+        ctx.beginPath(); ctx.moveTo(Math.cos(a) * R * 0.92, Math.sin(a) * R * 0.92); ctx.lineTo(Math.cos(a) * R * (i % 5 ? 0.85 : 0.8), Math.sin(a) * R * (i % 5 ? 0.85 : 0.8)); ctx.stroke();
+        if (i % 5 === 0) ctx.fillText(i, Math.cos(a) * R * 0.66, Math.sin(a) * R * 0.66);
+      }
+      ctx.restore();
+      ctx.fillStyle = '#1c1c1e';
+      ctx.beginPath(); ctx.arc(cx, cy, R * 0.35, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = `800 ${Math.round(R * 0.28)}px -apple-system, system-ui`;
+      ctx.fillText(num(), cx, cy + 1);
+      // Pointer at the top.
+      ctx.fillStyle = '#ff453a';
+      ctx.beginPath(); ctx.moveTo(cx, cy - R - 2); ctx.lineTo(cx - 6, cy - R - 12); ctx.lineTo(cx + 6, cy - R - 12); ctx.fill();
+      // Progress lights.
+      for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = i < step ? '#30d158' : '#3a3a3c';
+        ctx.beginPath(); ctx.arc(w / 2 + (i - 1) * 16, 30, 5, 0, TAU); ctx.fill();
+      }
+      if (flash > 0) { flash -= dt; ctx.fillStyle = `rgba(48,209,88,${flash})`; ctx.fillRect(0, 0, w, h); }
+    }
+
+    // Drag around the dial to turn it, or use the Crown.
+    let lastA = null;
+    const angleAt = p => Math.atan2(p.y - (view.h / 2 + 14), p.x - view.w / 2);
+    W.pointer(canvas, {
+      down(p) { lastA = angleAt(p); },
+      move(p) {
+        if (lastA === null) return;
+        const a = angleAt(p);
+        let d = a - lastA;
+        if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU;
+        turnBy(-d / TAU * N);
+        lastA = a;
+      },
+      up() { lastA = null; },
+    });
+    W.crown(d => turnBy(d * 0.05));
+    window.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') turnBy(-1); if (e.key === 'ArrowRight') turnBy(1); });
+
+    function start() { newSafe(); state = 'play'; }
+    newSafe();
+    W.overlay({ title: '🔐 Safe Cracker', text: 'Turn the Crown to spin<br>the dial. The ring glows red<br>near the number — rest on<br>it to lock it in. ×3', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
