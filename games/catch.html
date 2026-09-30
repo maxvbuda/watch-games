@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Catch</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const GOOD = ['🍎', '🍌', '🍇', '🍓', '🍒', '🍑'];
+
+    let bx, tx, items, score, lives, spawnT, elapsed, state = 'ready', pops = [];
+    const BW = () => view.w * 0.26, BY = () => view.h - 22, S = () => view.w * 0.1;
+
+    function reset() { bx = tx = view.w / 2; items = []; score = 0; lives = 3; spawnT = 0.5; elapsed = 0; updateHud(); }
+    function updateHud() { hud.innerHTML = `${score}<small>${'🧺'.repeat(lives)}</small>`; }
+
+    function spawn() {
+      const r = Math.random();
+      const kind = r < 0.14 ? 'bomb' : r < 0.2 ? 'star' : 'fruit';
+      items.push({ x: W.rand(S(), view.w - S()), y: -10, vy: view.h * W.rand(0.35, 0.5) * (1 + elapsed / 70), kind, e: kind === 'bomb' ? '💣' : kind === 'star' ? '🌟' : W.pick(GOOD), rot: 0, vr: W.rand(-3, 3) });
+    }
+
+    function update(dt) {
+      elapsed += dt;
+      bx += (tx - bx) * Math.min(1, dt * 14);
+      spawnT -= dt;
+      if (spawnT <= 0) { spawn(); spawnT = Math.max(0.3, 0.9 - elapsed * 0.01) * W.rand(0.7, 1.3); }
+      const bw = BW(), by = BY();
+      for (const it of items) {
+        it.y += it.vy * dt; it.rot += it.vr * dt;
+        if (!it.done && it.y > by - 10 && it.y < by + 8 && Math.abs(it.x - bx) < bw / 2) {
+          it.done = true;
+          if (it.kind === 'bomb') { lives--; pops.push({ x: it.x, y: by, e: '💥', t: 0.6 }); }
+          else { const p = it.kind === 'star' ? 5 : 1; score += p; pops.push({ x: it.x, y: by - 16, e: '+' + p, t: 0.6 }); }
+          updateHud();
+        }
+        if (!it.done && it.y > view.h + 10) {
+          it.done = true;
+          if (it.kind === 'fruit') { lives--; updateHud(); }
+        }
+      }
+      items = items.filter(it => !it.done);
+      if (lives <= 0) {
+        state = 'over';
+        const best = W.best('catch', score);
+        setTimeout(() => W.overlay({ title: 'Game over', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 500);
+      }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#1d3557'); g.addColorStop(1, '#457b9d');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#000';
+      ctx.font = `${Math.round(S() * 1.6)}px sans-serif`;
+      for (const it of items) { ctx.save(); ctx.translate(it.x, it.y); ctx.rotate(it.rot); ctx.fillText(it.e, 0, 0); ctx.restore(); }
+      const bw = BW(), by = BY();
+      ctx.fillStyle = '#c48a50';
+      ctx.beginPath(); ctx.moveTo(bx - bw / 2, by - 6); ctx.lineTo(bx + bw / 2, by - 6); ctx.lineTo(bx + bw * 0.38, by + 14); ctx.lineTo(bx - bw * 0.38, by + 14); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#8b5a2b'; ctx.lineWidth = 1.5;
+      for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(bx - bw / 2 + (bw * i) / 4, by - 6); ctx.lineTo(bx - bw * 0.38 + (bw * 0.76 * i) / 4, by + 14); ctx.stroke(); }
+      for (const p of pops) {
+        p.t -= dt; p.y -= 30 * dt;
+        ctx.globalAlpha = Math.max(0, p.t * 2);
+        ctx.fillStyle = '#ffd60a';
+        ctx.font = '800 14px -apple-system, system-ui';
+        ctx.fillText(p.e, p.x, p.y);
+      }
+      ctx.globalAlpha = 1;
+      pops = pops.filter(p => p.t > 0);
+    }
+
+    const clampX = x => W.clamp(x, BW() / 2, view.w - BW() / 2);
+    W.pointer(canvas, { down: p => (tx = clampX(p.x)), move: p => (tx = clampX(p.x)) });
+    W.crown(d => { if (state === 'play') tx = clampX(tx + d * 0.8); });
+    const keys = {};
+    window.addEventListener('keydown', e => (keys[e.key] = true));
+    window.addEventListener('keyup', e => (keys[e.key] = false));
+
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🧺 Catch', text: 'Turn the Crown or drag<br>to move the basket.<br>Catch fruit, dodge 💣!', onStart: start });
+    W.loop(dt => {
+      if (keys.ArrowLeft) tx = clampX(tx - view.w * 1.2 * dt);
+      if (keys.ArrowRight) tx = clampX(tx + view.w * 1.2 * dt);
+      if (state === 'play') update(dt);
+      render(dt);
+    });
+  </script>
+</body>
+</html>

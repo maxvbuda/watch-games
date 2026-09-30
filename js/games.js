@@ -64,4 +64,5 @@ window.GAMES = [
   { id: 'mancala', name: 'Mancala', emoji: '🪨', color: '#8b5a2b', desc: 'Sow stones, capture, outscore' },
   { id: 'flood', name: 'Flood It', emoji: '🌊', color: '#0a84ff', desc: 'Fill the board in 22 moves', unit: ' moves' },
   { id: 'codebreaker', name: 'Code Breaker', emoji: '🔐', color: '#5e5ce6', desc: 'Crack the colour code', unit: ' tries' },
+  { id: 'catch', name: 'Catch', emoji: '🧺', color: '#457b9d', desc: 'Crown moves the basket' },
 ];
