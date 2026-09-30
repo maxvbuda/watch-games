@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Connect Four</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const C = 7, R = 6;
+    let cell, ox, oy;
+    const view = W.setupCanvas(canvas, (w, h) => {
+      cell = Math.min((w - 6) / C, (h - 40) / R);
+      ox = (w - cell * C) / 2;
+      oy = h - cell * R - 4;
+    });
+    const ctx = view.ctx;
+
+    let board, turn, busy, done, drop, winLine, tally = { w: 0, l: 0 }, youFirst = true;
+
+    const at = (b, c, r) => (c >= 0 && c < C && r >= 0 && r < R ? b[r * C + c] : -1);
+    const lowest = (b, c) => { for (let r = R - 1; r >= 0; r--) if (!b[r * C + c]) return r; return -1; };
+
+    function findWin(b) {
+      for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+        const p = b[r * C + c];
+        if (!p) continue;
+        for (const [dc, dr] of [[1, 0], [0, 1], [1, 1], [1, -1]]) {
+          const line = [[c, r]];
+          for (let k = 1; k < 4 && at(b, c + dc * k, r + dr * k) === p; k++) line.push([c + dc * k, r + dr * k]);
+          if (line.length === 4) return { p, line };
+        }
+      }
+      return null;
+    }
+
+    // Heuristic: count open windows of 4 for each side.
+    function evaluate(b) {
+      let s = 0;
+      for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+        for (const [dc, dr] of [[1, 0], [0, 1], [1, 1], [1, -1]]) {
+          let ai = 0, me = 0, ok = true;
+          for (let k = 0; k < 4; k++) {
+            const v = at(b, c + dc * k, r + dr * k);
+            if (v === -1) { ok = false; break; }
+            if (v === 2) ai++; else if (v === 1) me++;
+          }
+          if (!ok || (ai && me)) continue;
+          s += [0, 1, 4, 16, 1000][ai] - [0, 1, 5, 20, 1000][me];
+        }
+        if (b[r * C + 3] === 2) s += 2;  // centre column is valuable
+      }
+      return s;
+    }
+
+    function negamax(b, depth, alpha, beta, player) {
+      const w = findWin(b);
+      if (w) return w.p === player ? 100000 + depth : -100000 - depth;
+      if (depth === 0 || !b.includes(0)) return (player === 2 ? 1 : -1) * evaluate(b);
+      let best = -Infinity;
+      for (const c of [3, 2, 4, 1, 5, 0, 6]) {
+        const r = lowest(b, c);
+        if (r < 0) continue;
+        b[r * C + c] = player;
+        const v = -negamax(b, depth - 1, -beta, -alpha, 3 - player);
+        b[r * C + c] = 0;
+        if (v > best) best = v;
+        if (v > alpha) alpha = v;
+        if (alpha >= beta) break;
+      }
+      return best;
+    }
+
+    function aiMove() {
+      let best = -Infinity, move = 3;
+      const cols = [3, 2, 4, 1, 5, 0, 6];
+      for (const c of cols) {
+        const r = lowest(board, c);
+        if (r < 0) continue;
+        board[r * C + c] = 2;
+        const v = -negamax(board, 4, -Infinity, Infinity, 1) + W.rand(0, 3);
+        board[r * C + c] = 0;
+        if (v > best) { best = v; move = c; }
+      }
+      return move;
+    }
+
+    function place(c, p, then) {
+      const r = lowest(board, c);
+      if (r < 0) return false;
+      busy = true;
+      drop = { c, r, p, y: -1 };
+      const anim = () => {
+        drop.y += 0.9;
+        if (drop.y < r) return requestAnimationFrame(anim);
+        board[r * C + c] = p;
+        drop = null;
+        busy = false;
+        then();
+      };
+      anim();
+      return true;
+    }
+
+    function afterMove() {
+      const w = findWin(board);
+      if (w || !board.includes(0)) {
+        done = true;
+        winLine = w ? w.line : [];
+        let title = 'Draw';
+        if (w && w.p === 1) { tally.w++; title = 'You win! 🎉'; W.best('connect4', tally.w); }
+        else if (w) { tally.l++; title = 'Watch wins 🤖'; }
+        updateHud();
+        setTimeout(() => W.overlay({ title, text: `You ${tally.w} – ${tally.l} Watch`, button: 'Next', onStart: start }), 1000);
+        return;
+      }
+      turn = 3 - turn;
+      if (turn === 2) setTimeout(() => place(aiMove(), 2, afterMove), 250);
+    }
+
+    function tap(p) {
+      if (busy || done || turn !== 1) return;
+      const c = Math.floor((p.x - ox) / cell);
+      if (c < 0 || c >= C) return;
+      place(c, 1, afterMove);
+    }
+
+    function updateHud() { hud.innerHTML = `${tally.w}–${tally.l}`; }
+
+    function disc(c, y, p) {
+      ctx.fillStyle = p === 1 ? '#ff453a' : '#ffd60a';
+      ctx.beginPath(); ctx.arc(ox + (c + 0.5) * cell, oy + (y + 0.5) * cell, cell * 0.4, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#0a4fb5';
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(ox - 2, oy - 2, cell * C + 4, cell * R + 4, 6) : ctx.rect(ox - 2, oy - 2, cell * C + 4, cell * R + 4);
+      ctx.fill();
+      for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+        const v = board[r * C + c];
+        if (v) disc(c, r, v);
+        else { ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ox + (c + 0.5) * cell, oy + (r + 0.5) * cell, cell * 0.4, 0, Math.PI * 2); ctx.fill(); }
+      }
+      if (drop) disc(drop.c, drop.y, drop.p);
+      if (winLine) for (const [c, r] of winLine) {
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(ox + (c + 0.5) * cell, oy + (r + 0.5) * cell, cell * 0.3, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.fillStyle = '#8e8e93';
+      ctx.font = '600 11px -apple-system, system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(done ? '' : turn === 1 ? 'Your turn 🔴' : 'Thinking… 🟡', w / 2, oy - 8);
+    }
+
+    W.pointer(canvas, { down: tap });
+
+    function start() {
+      board = new Array(C * R).fill(0);
+      done = false; busy = false; winLine = null;
+      turn = youFirst ? 1 : 2;
+      youFirst = !youFirst;
+      updateHud();
+      if (turn === 2) setTimeout(() => place(aiMove(), 2, afterMove), 300);
+    }
+
+    start();
+    W.loop(render);
+  </script>
+</body>
+</html>
