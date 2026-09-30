@@ -8,4 +8,5 @@ window.GAMES = [
   { id: 'whack', name: 'Whack-a-Mole', emoji: '🐹', color: '#ac8e68', desc: '30 seconds of bonking' },
   { id: 'simon', name: 'Simon', emoji: '🔴', color: '#ff453a', desc: 'Repeat the pattern' },
   { id: 'pong', name: 'Pong', emoji: '🏓', color: '#64d2ff', desc: 'First to 7 vs the watch' },
+  { id: 'breakout', name: 'Breakout', emoji: '🟪', color: '#5e5ce6', desc: 'Smash every brick' },
 ];

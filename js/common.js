@@ -54,17 +54,21 @@
 
   // Swipe detection (plus arrow keys / WASD for desktop). cb('up'|'down'|'left'|'right')
   W.swipe = function (el, cb, onTap) {
-    let sx = 0, sy = 0, st = 0;
+    // Fires as soon as the finger travels far enough, so no need to lift it.
+    let sx = 0, sy = 0, st = 0, fired = false;
+    function detect(p) {
+      const dx = p.x - sx, dy = p.y - sy;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 14) return false;
+      if (Math.abs(dx) > Math.abs(dy)) cb(dx > 0 ? 'right' : 'left');
+      else cb(dy > 0 ? 'down' : 'up');
+      return true;
+    }
     W.pointer(el, {
-      down(p) { sx = p.x; sy = p.y; st = Date.now(); },
+      down(p) { sx = p.x; sy = p.y; st = Date.now(); fired = false; },
+      move(p) { if (!fired) fired = detect(p); },
       up(p) {
-        const dx = p.x - sx, dy = p.y - sy;
-        if (Math.max(Math.abs(dx), Math.abs(dy)) < 14) {
-          if (onTap && Date.now() - st < 500) onTap(p);
-          return;
-        }
-        if (Math.abs(dx) > Math.abs(dy)) cb(dx > 0 ? 'right' : 'left');
-        else cb(dy > 0 ? 'down' : 'up');
+        if (fired) return;
+        if (!detect(p) && onTap && Date.now() - st < 500) onTap(p);
       },
     });
     const keys = {
