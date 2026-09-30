@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Tower of Hanoi</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const COLORS = ['#ff453a', '#ff9f0a', '#ffd60a', '#30d158', '#64d2ff', '#0a84ff', '#bf5af2'];
+
+    let pegs, held, moves, discs = 3, done;
+
+    function start() {
+      pegs = [[], [], []];
+      for (let d = discs; d >= 1; d--) pegs[0].push(d);
+      held = null; moves = 0; done = false;
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `${moves}<small>min ${2 ** discs - 1}</small>`; }
+
+    // Tap a peg to pick up its top disc, tap another to drop it there.
+    function tap(p) {
+      if (done) return;
+      const i = W.clamp(Math.floor(p.x / (view.w / 3)), 0, 2);
+      if (held === null) {
+        if (pegs[i].length) held = i;
+      } else {
+        const d = pegs[held][pegs[held].length - 1];
+        const top = pegs[i][pegs[i].length - 1];
+        if (i !== held && (!top || top > d)) {
+          pegs[i].push(pegs[held].pop());
+          moves++;
+          updateHud();
+        }
+        held = null;
+        if (pegs[2].length === discs) {
+          done = true;
+          const perfect = moves === 2 ** discs - 1;
+          W.best('hanoi', discs);
+          setTimeout(() => W.overlay({
+            title: perfect ? 'Perfect! 🏆' : 'Solved!',
+            big: moves + ' moves',
+            text: `${discs} discs (min ${2 ** discs - 1})`,
+            button: discs < 7 ? `Try ${discs + 1} discs` : 'Again',
+            onStart: () => { if (discs < 7) discs++; start(); },
+          }), 400);
+        }
+      }
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      const pw = w / 3, base = h - 14, dh = Math.min(16, (h - 90) / 7);
+      ctx.fillStyle = '#48484a';
+      ctx.fillRect(4, base, w - 8, 4);
+      pegs.forEach((peg, i) => {
+        const cx = pw * (i + 0.5);
+        ctx.fillStyle = held === i ? '#8e8e93' : '#48484a';
+        ctx.fillRect(cx - 2, base - dh * (discs + 1.5), 4, dh * (discs + 1.5));
+        peg.forEach((d, k) => {
+          const lifted = held === i && k === peg.length - 1;
+          const dw = pw * 0.3 + (pw * 0.62) * (d / discs);
+          const y = lifted ? base - dh * (discs + 2.8) : base - dh * (k + 1);
+          ctx.fillStyle = COLORS[(d - 1) % COLORS.length];
+          ctx.beginPath();
+          ctx.roundRect ? ctx.roundRect(cx - dw / 2, y, dw, dh - 2, 4) : ctx.rect(cx - dw / 2, y, dw, dh - 2);
+          ctx.fill();
+        });
+      });
+      if (!moves && held === null) {
+        ctx.fillStyle = '#8e8e93';
+        ctx.font = '600 11px -apple-system, system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('Move the tower to the right →', w / 2, 44);
+      }
+    }
+
+    W.pointer(canvas, { down: tap });
+    start();
+    W.loop(render);
+  </script>
+</body>
+</html>

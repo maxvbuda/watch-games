@@ -35,4 +35,5 @@ window.GAMES = [
   { id: 'cave', name: 'Cave Flyer', emoji: '🦇', color: '#248a3d', desc: 'Hold to rise through the cave' },
   { id: 'hop', name: 'Hop', emoji: '🐔', color: '#48a848', desc: 'Cross roads and rivers' },
   { id: 'maze', name: 'Maze', emoji: '🌀', color: '#0a84ff', desc: 'Roll to the exit' },
+  { id: 'hanoi', name: 'Tower of Hanoi', emoji: '🗼', color: '#ff9f0a', desc: 'Move the tower, one disc at a time' },
 ];
