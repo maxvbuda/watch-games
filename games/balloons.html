@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Balloon Pop</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const COLORS = ['#ff453a', '#ff9f0a', '#ffd60a', '#30d158', '#64d2ff', '#bf5af2', '#ff375f'];
+
+    let balloons, pops, score, lives, spawnT, elapsed, state = 'ready';
+    const BR = () => view.w * 0.085;
+
+    function reset() { balloons = []; pops = []; score = 0; lives = 5; spawnT = 0; elapsed = 0; updateHud(); }
+    function updateHud() { hud.innerHTML = `${score}<small>${'🎈'.repeat(lives)}</small>`; }
+
+    function spawn() {
+      const r = BR() * W.rand(0.85, 1.15);
+      const kind = Math.random() < 0.1 ? 'gold' : Math.random() < Math.min(0.2, elapsed / 200) ? 'spike' : 'normal';
+      balloons.push({
+        x: W.rand(r, view.w - r), y: view.h + r * 2, r,
+        vy: view.h * W.rand(0.28, 0.4) * (1 + elapsed / 60),
+        wob: Math.random() * 6, color: kind === 'gold' ? '#ffd700' : kind === 'spike' ? '#1c1c1e' : W.pick(COLORS), kind,
+      });
+    }
+
+    function tap(p) {
+      if (state !== 'play') return;
+      // Pop the top-most balloon under the finger (generous hit area for small screens).
+      for (let i = balloons.length - 1; i >= 0; i--) {
+        const b = balloons[i];
+        if (Math.hypot(p.x - b.x, p.y - b.y) < b.r * 1.35) {
+          balloons.splice(i, 1);
+          for (let k = 0; k < 10; k++) pops.push({ x: b.x, y: b.y, vx: W.rand(-90, 90), vy: W.rand(-90, 90), t: 0.35, c: b.color });
+          if (b.kind === 'spike') { lives = 0; return die(); }
+          score += b.kind === 'gold' ? 5 : 1;
+          updateHud();
+          return;
+        }
+      }
+    }
+
+    function update(dt) {
+      elapsed += dt;
+      spawnT -= dt;
+      if (spawnT <= 0) { spawn(); spawnT = Math.max(0.28, 0.9 - elapsed * 0.012) * W.rand(0.7, 1.3); }
+      for (const b of balloons) { b.y -= b.vy * dt; b.wob += dt * 3; }
+      for (const b of balloons) {
+        if (b.y < -b.r * 2) {
+          b.gone = true;
+          if (b.kind !== 'spike') { lives--; updateHud(); if (lives <= 0) return die(); }
+        }
+      }
+      balloons = balloons.filter(b => !b.gone);
+    }
+
+    function die() {
+      state = 'over';
+      updateHud();
+      const best = W.best('balloons', score);
+      setTimeout(() => W.overlay({ title: 'Game over', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 500);
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#5ac8fa'); g.addColorStop(1, '#b8e6ff');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+      for (const b of balloons) {
+        const x = b.x + Math.sin(b.wob) * 4;
+        ctx.strokeStyle = '#0006';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, b.y + b.r * 1.15); ctx.quadraticCurveTo(x + 4, b.y + b.r * 1.8, x, b.y + b.r * 2.4); ctx.stroke();
+        ctx.fillStyle = b.color;
+        ctx.beginPath(); ctx.ellipse(x, b.y, b.r, b.r * 1.18, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x - 3, b.y + b.r * 1.25); ctx.lineTo(x + 3, b.y + b.r * 1.25); ctx.lineTo(x, b.y + b.r * 1.1); ctx.fill();
+        ctx.fillStyle = '#ffffff66';
+        ctx.beginPath(); ctx.ellipse(x - b.r * 0.35, b.y - b.r * 0.4, b.r * 0.2, b.r * 0.3, -0.5, 0, Math.PI * 2); ctx.fill();
+        if (b.kind === 'spike') {
+          ctx.fillStyle = '#fff';
+          ctx.font = `${Math.round(b.r)}px sans-serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText('☠️', x, b.y);
+        }
+      }
+      for (const p of pops) {
+        p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+        ctx.fillStyle = p.c;
+        ctx.globalAlpha = Math.max(0, p.t * 3);
+        ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+      }
+      ctx.globalAlpha = 1;
+      pops = pops.filter(p => p.t > 0);
+    }
+
+    W.pointer(canvas, { down: tap });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🎈 Balloon Pop', text: 'Pop balloons before they<br>float away. Gold = 5.<br>Never pop ☠️!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>

@@ -29,4 +29,5 @@ window.GAMES = [
   { id: 'orbit', name: 'Orbit', emoji: '🪐', color: '#5e5ce6', desc: 'Tap to reverse, grab gems' },
   { id: 'blackjack', name: 'Blackjack', emoji: '♠️', color: '#1f8f3a', desc: 'Beat the dealer to 21', unit: ' chips' },
   { id: 'hilo', name: 'Higher or Lower', emoji: '🎴', color: '#bf5af2', desc: 'Guess the next card' },
+  { id: 'balloons', name: 'Balloon Pop', emoji: '🎈', color: '#ff375f', desc: 'Pop them before they escape' },
 ];
