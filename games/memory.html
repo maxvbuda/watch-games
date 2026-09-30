@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Memory Match</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 28px; }
+    #grid {
+      --size: min(96vw, calc(100vh - 34px));
+      width: var(--size);
+      height: var(--size);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+      gap: 4px;
+      perspective: 400px;
+    }
+    .card { position: relative; transform-style: preserve-3d; transition: transform 0.25s; }
+    .card.up, .card.done { transform: rotateY(180deg); }
+    .card div {
+      position: absolute;
+      inset: 0;
+      border-radius: 8px;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .back-face { background: linear-gradient(135deg, #5e5ce6, #bf5af2); }
+    .front { background: #2c2c2e; transform: rotateY(180deg); font-size: calc(var(--size) / 6.5); }
+    .card.done .front { background: #30d15833; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="grid"></div></div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const EMOJI = ['🍕', '🚀', '🐶', '🌈', '⚽️', '🎸', '🍩', '🦄', '🐙', '🌵', '🎲', '🍉', '🦊', '⭐️'];
+    const gridEl = document.getElementById('grid');
+    const hud = document.getElementById('hud');
+    let cards, open, moves, matched, lock;
+
+    function start() {
+      const picks = [...EMOJI].sort(() => Math.random() - 0.5).slice(0, 8);
+      const deck = [...picks, ...picks].sort(() => Math.random() - 0.5);
+      gridEl.innerHTML = '';
+      open = [];
+      moves = 0;
+      matched = 0;
+      lock = false;
+      cards = deck.map((e, i) => {
+        const el = document.createElement('div');
+        el.className = 'card';
+        el.innerHTML = `<div class="back-face"></div><div class="front">${e}</div>`;
+        el.addEventListener('click', () => flip(i));
+        gridEl.appendChild(el);
+        return { e, el, done: false };
+      });
+      updateHud();
+    }
+
+    function updateHud() { hud.innerHTML = `${moves}<small>moves</small>`; }
+
+    function flip(i) {
+      const c = cards[i];
+      if (lock || c.done || open.includes(c)) return;
+      c.el.classList.add('up');
+      open.push(c);
+      if (open.length < 2) return;
+      moves++;
+      updateHud();
+      const [a, b] = open;
+      if (a.e === b.e) {
+        a.done = b.done = true;
+        a.el.classList.add('done');
+        b.el.classList.add('done');
+        open = [];
+        matched += 2;
+        if (matched === cards.length) {
+          const best = W.best('memory', moves, true);
+          setTimeout(() => W.overlay({ title: 'All matched! 🎉', big: moves + ' moves', text: `Best ${best}`, button: 'Again', onStart: start }), 600);
+        }
+      } else {
+        lock = true;
+        setTimeout(() => {
+          a.el.classList.remove('up');
+          b.el.classList.remove('up');
+          open = [];
+          lock = false;
+        }, 750);
+      }
+    }
+
+    start();
+  </script>
+</body>
+</html>
