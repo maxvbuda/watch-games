@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Tunnel</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const TAU = Math.PI * 2;
+
+    // Rings fly outward from the centre; each has a gap. Rotate around the rim to slip through.
+    let pa, rings, speed, score, spawnT, state = 'ready', t = 0, hue = 0, holdDir = 0;
+    const R = () => Math.min(view.w, view.h) * 0.46;
+
+    function reset() { pa = Math.PI / 2; rings = []; speed = 0.42; score = 0; spawnT = 0.3; hud.textContent = '0'; }
+
+    function spawn() {
+      const gap = Math.max(0.9, 1.9 - score * 0.03);
+      rings.push({ r: 0, gapAt: Math.random() * TAU, gap, spin: score > 12 && Math.random() < 0.4 ? W.rand(-0.8, 0.8) : 0 });
+    }
+
+    const angDiff = (a, b) => { let d = ((a - b) % TAU + TAU) % TAU; return d > Math.PI ? d - TAU : d; };
+
+    function update(dt) {
+      t += dt;
+      speed = Math.min(1.1, speed + dt * 0.006);
+      pa += holdDir * 4 * dt;
+      spawnT -= dt;
+      if (spawnT <= 0) { spawn(); spawnT = Math.max(0.55, 1.15 - score * 0.012); }
+      for (const g of rings) {
+        const prev = g.r;
+        // Perspective: rings accelerate as they approach the rim.
+        g.r += (0.08 + g.r) * speed * dt;
+        g.gapAt += g.spin * dt;
+        if (prev < 0.96 && g.r >= 0.96) {
+          if (Math.abs(angDiff(pa, g.gapAt)) > g.gap / 2 - 0.08) {
+            state = 'over';
+            const best = W.best('tunnel', score);
+            setTimeout(() => W.overlay({ title: 'Crashed!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 500);
+            return;
+          }
+          score++;
+          hud.textContent = score;
+        }
+      }
+      rings = rings.filter(g => g.r < 1.3);
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const cx = w / 2, cy = h / 2 + 6, rr = R();
+      hue = (hue + dt * 12) % 360;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      // Depth lines.
+      ctx.strokeStyle = `hsla(${hue},80%,50%,0.15)`;
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 12; i++) {
+        const a = i / 12 * TAU + t * 0.2;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * rr * 1.2, cy + Math.sin(a) * rr * 1.2); ctx.stroke();
+      }
+      ctx.strokeStyle = `hsla(${hue},80%,60%,0.35)`;
+      ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
+      for (const g of rings) {
+        const r = g.r * rr;
+        ctx.strokeStyle = `hsl(${(hue + g.r * 120) % 360},85%,${45 + g.r * 20}%)`;
+        ctx.lineWidth = 2 + g.r * 7;
+        ctx.beginPath(); ctx.arc(cx, cy, r, g.gapAt + g.gap / 2, g.gapAt - g.gap / 2 + TAU); ctx.stroke();
+      }
+      if (state !== 'over') {
+        ctx.fillStyle = '#fff';
+        ctx.save();
+        ctx.translate(cx + Math.cos(pa) * rr, cy + Math.sin(pa) * rr);
+        ctx.rotate(pa + Math.PI / 2);
+        ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(6, 5); ctx.lineTo(-6, 5); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    W.pointer(canvas, { down: p => (holdDir = p.x < view.w / 2 ? -1 : 1), up: () => (holdDir = 0) });
+    W.crown(d => { if (state === 'play') pa += d * 0.012; });
+    window.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') holdDir = -1; if (e.key === 'ArrowRight') holdDir = 1; });
+    window.addEventListener('keyup', () => (holdDir = 0));
+
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🌀 Tunnel', text: 'Turn the Crown (or hold<br>left/right) to slip<br>through the gaps!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
