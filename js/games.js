@@ -31,4 +31,5 @@ window.GAMES = [
   { id: 'hilo', name: 'Higher or Lower', emoji: '🎴', color: '#bf5af2', desc: 'Guess the next card' },
   { id: 'balloons', name: 'Balloon Pop', emoji: '🎈', color: '#ff375f', desc: 'Pop them before they escape' },
   { id: 'numbers', name: 'Number Rush', emoji: '🔢', color: '#64d2ff', desc: 'Tap 1–16 in order', unit: 's' },
+  { id: 'stop', name: 'Perfect Stop', emoji: '🎯', color: '#30d158', desc: 'Stop the needle in the zone' },
 ];

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Perfect Stop</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const TAU = Math.PI * 2;
+
+    // A needle sweeps around a dial; tap to stop it inside the green zone.
+    let ang, speed, dir, zone, zoneW, score, state = 'ready', result = null, resultT = 0;
+
+    function newZone() {
+      zoneW = Math.max(0.28, 0.9 - score * 0.045);
+      let z;
+      do z = Math.random() * TAU; while (Math.abs(((z - ang) % TAU + TAU) % TAU - Math.PI) > 2.2);  // not right under the needle
+      zone = z;
+    }
+
+    function reset() {
+      ang = -Math.PI / 2; speed = 2.6; dir = 1; score = 0; result = null;
+      newZone();
+      hud.textContent = '0';
+    }
+
+    function stop() {
+      if (state !== 'play') return;
+      let d = ((ang - zone) % TAU + TAU) % TAU;
+      if (d > Math.PI) d -= TAU;
+      if (Math.abs(d) <= zoneW / 2) {
+        const perfect = Math.abs(d) < zoneW * 0.12;
+        score += perfect ? 2 : 1;
+        result = perfect ? 'PERFECT +2' : 'Nice';
+        resultT = 0.6;
+        hud.textContent = score;
+        speed = Math.min(7, speed + 0.25);
+        dir *= -1;
+        newZone();
+      } else {
+        state = 'over';
+        result = 'Miss';
+        resultT = 1;
+        const best = W.best('stop', score);
+        setTimeout(() => W.overlay({ title: 'Missed!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 600);
+      }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const cx = w / 2, cy = h / 2 + 10, r = Math.min(w, h) * 0.38;
+      if (state === 'play') ang += dir * speed * dt;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      ctx.lineWidth = r * 0.2;
+      ctx.strokeStyle = '#2c2c2e';
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = '#30d158';
+      ctx.beginPath(); ctx.arc(cx, cy, r, zone - zoneW / 2, zone + zoneW / 2); ctx.stroke();
+      ctx.strokeStyle = '#ffd60a';
+      ctx.beginPath(); ctx.arc(cx, cy, r, zone - zoneW * 0.12, zone + zoneW * 0.12); ctx.stroke();
+
+      ctx.strokeStyle = state === 'over' ? '#ff453a' : '#fff';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(ang) * r * 1.12, cy + Math.sin(ang) * r * 1.12); ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(cx, cy, 5, 0, TAU); ctx.fill();
+
+      if (resultT > 0) {
+        resultT -= dt;
+        ctx.globalAlpha = Math.min(1, resultT * 3);
+        ctx.fillStyle = result === 'Miss' ? '#ff453a' : result === 'Nice' ? '#30d158' : '#ffd60a';
+        ctx.font = `800 ${Math.round(r * 0.28)}px -apple-system, system-ui`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(result, cx, cy + r * 0.45);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    W.pointer(canvas, { down: stop });
+    window.addEventListener('keydown', e => { if (e.key === ' ') stop(); });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🎯 Perfect Stop', text: 'Tap to stop the needle<br>in the green zone.<br>Yellow = perfect!', onStart: start });
+    W.loop(render);
+  </script>
+</body>
+</html>
