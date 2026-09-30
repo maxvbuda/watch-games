@@ -50,4 +50,5 @@ window.GAMES = [
   { id: 'slots', name: 'Slots', emoji: '🎰', color: '#c9302c', desc: 'Spin — the Crown pulls the lever', unit: ' credits' },
   { id: 'chimp', name: 'Chimp Test', emoji: '🐵', color: '#ac8e68', desc: 'Remember hidden numbers' },
   { id: 'scramble', name: 'Word Scramble', emoji: '🔤', color: '#ffd60a', desc: 'Unscramble against the clock' },
+  { id: 'darts', name: 'Darts', emoji: '🎯', color: '#e0302a', desc: 'Time your throws' },
 ];
