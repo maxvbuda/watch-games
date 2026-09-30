@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Beach Buggy</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    .hud { text-align: right; }
+    #pos { position: fixed; left: 38px; top: max(6px, env(safe-area-inset-top)); z-index: 10; font-weight: 900; font-size: 20px; text-shadow: 0 1px 3px #000; pointer-events: none; }
+    #pos small { font-size: 11px; }
+    #item {
+      position: fixed; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 10;
+      width: 42px; height: 42px; border-radius: 12px; border: 2px solid #ffffffaa; background: #0008;
+      font-size: 22px; display: flex; align-items: center; justify-content: center; color: #fff;
+    }
+    #item.has { border-color: #ffd60a; background: #ffd60a44; }
+  </style>
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div id="pos"></div>
+  <div class="hud" id="hud"></div>
+  <button id="item" aria-label="Use item"></button>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const posEl = document.getElementById('pos');
+    const itemBtn = document.getElementById('item');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const TAU = Math.PI * 2;
+    const LAPS = 3, TW = 74;   // track width (world units)
+    const ITEMS = [
+      { k: 'boost', e: '🔥' }, { k: 'rocket', e: '🚀' }, { k: 'oil', e: '🛢️' }, { k: 'shield', e: '🛡️' }, { k: 'triple', e: '⚡' },
+    ];
+
+    // ---- Track: a closed Catmull-Rom loop through these points ----
+    const CTRL = [[200, 150], [520, 90], [840, 160], [940, 380], [800, 540], [580, 470], [470, 620], [640, 790], [380, 860], [150, 720], [110, 430]];
+    const track = [];
+    for (let i = 0; i < CTRL.length; i++) {
+      const p0 = CTRL[(i - 1 + CTRL.length) % CTRL.length], p1 = CTRL[i], p2 = CTRL[(i + 1) % CTRL.length], p3 = CTRL[(i + 2) % CTRL.length];
+      for (let s = 0; s < 22; s++) {
+        const t = s / 22, t2 = t * t, t3 = t2 * t;
+        const f = (a, b, c, d) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+        track.push({ x: f(p0[0], p1[0], p2[0], p3[0]), y: f(p0[1], p1[1], p2[1], p3[1]) });
+      }
+    }
+    const N = track.length;
+    track.forEach((p, i) => { const q = track[(i + 1) % N]; p.a = Math.atan2(q.y - p.y, q.x - p.x); });
+
+    // Scenery: palms and parasols well off the track.
+    const deco = [];
+    for (let k = 0; deco.length < 70 && k < 2000; k++) {
+      const x = W.rand(-100, 1100), y = W.rand(-50, 1000);
+      if (track.every(p => Math.hypot(p.x - x, p.y - y) > TW)) deco.push({ x, y, e: W.pick(['🌴', '🌴', '🌴', '⛱️', '🦀', '🐚']) });
+    }
+
+    function nearest(car) {
+      // Local search around the last known index keeps this cheap.
+      let best = car.idx, bd = Infinity;
+      for (let k = -12; k <= 12; k++) {
+        const i = (car.idx + k + N) % N, p = track[i];
+        const d = (p.x - car.x) ** 2 + (p.y - car.y) ** 2;
+        if (d < bd) { bd = d; best = i; }
+      }
+      return [best, Math.sqrt(bd)];
+    }
+
+    const COLORS = ['#30d158', '#ff453a', '#0a84ff', '#ff9f0a', '#bf5af2'];
+    const NAMES = ['You', 'Rex', 'Nova', 'Sandy', 'Blaze'];
+    let cars, me, boxes, rockets, slicks, state = 'ready', countdown, raceT, steerHold = 0, finishOrder, flash = 0;
+
+    function makeCar(i) {
+      const back = N - 4 - Math.floor(i / 2) * 4, p = track[back], side = i % 2 ? 1 : -1;
+      const nx = -Math.sin(p.a), ny = Math.cos(p.a);
+      return {
+        x: p.x + nx * side * 16, y: p.y + ny * side * 16, a: p.a, v: 0, idx: back, laps: -1, check: true,
+        color: COLORS[i], name: NAMES[i], ai: i > 0, item: null, rolling: 0, spin: 0, boost: 0, shield: 0,
+        skill: 0.9 + Math.random() * 0.12, lane: W.rand(-0.5, 0.5), itemT: 0, done: false,
+      };
+    }
+
+    function reset() {
+      cars = [0, 1, 2, 3, 4].map(makeCar);
+      me = cars[0];
+      boxes = [];
+      for (const at of [Math.floor(N * 0.15), Math.floor(N * 0.45), Math.floor(N * 0.75)]) {
+        const p = track[at], nx = -Math.sin(p.a), ny = Math.cos(p.a);
+        for (const o of [-22, 0, 22]) boxes.push({ x: p.x + nx * o, y: p.y + ny * o, t: 0 });
+      }
+      rockets = []; slicks = []; finishOrder = [];
+      countdown = 3; raceT = 0;
+      updateItem();
+    }
+
+    const progress = c => c.laps * N + c.idx;
+    const ranked = () => [...cars].sort((a, b) => (b.done - a.done) || (a.done && b.done ? a.finishT - b.finishT : progress(b) - progress(a)));
+
+    function giveItem(c) {
+      if (c.item || c.rolling) return;
+      // Cars at the back get better items (just like the real thing).
+      const place = ranked().indexOf(c);
+      let pool = ITEMS;
+      if (place === 0) pool = ITEMS.filter(i => i.k !== 'triple' && i.k !== 'rocket');
+      c.rolling = 0.8;
+      c.pending = W.pick(pool);
+      c.itemT = W.rand(0.8, 3);
+    }
+
+    function useItem(c) {
+      if (!c.item || c.spin > 0 || state !== 'race') return;
+      const it = c.item.k;
+      if (it === 'boost') c.boost = 1.6;
+      if (it === 'triple') c.boost = 3;
+      if (it === 'shield') c.shield = 5;
+      if (it === 'oil') slicks.push({ x: c.x - Math.cos(c.a) * 18, y: c.y - Math.sin(c.a) * 18, t: 12 });
+      if (it === 'rocket') {
+        const order = ranked(), i = order.indexOf(c);
+        const target = i > 0 ? order[i - 1] : null;
+        rockets.push({ x: c.x, y: c.y, a: c.a, target, t: 3.5, owner: c });
+      }
+      c.item = null;
+      if (c === me) updateItem();
+    }
+
+    function spinOut(c) {
+      if (c.shield > 0) { c.shield = 0; return; }
+      c.spin = 1.3;
+      if (c === me) flash = 0.3;
+    }
+
+    function updateItem() {
+      if (me.rolling > 0) itemBtn.textContent = W.pick(ITEMS).e;
+      else itemBtn.textContent = me.item ? me.item.e : '';
+      itemBtn.classList.toggle('has', !!me.item);
+    }
+
+    function stepCar(c, dt) {
+      const [idx, off] = nearest(c);
+      // Lap counting with a halfway checkpoint so reversing can't cheat.
+      if (idx > N * 0.45 && idx < N * 0.55) c.check = true;
+      if (c.idx > N * 0.9 && idx < N * 0.1 && c.check) {
+        c.laps++; c.check = false;
+        if (c.laps >= LAPS && !c.done) {
+          c.done = true; c.finishT = raceT; finishOrder.push(c);
+          if (c === me) finish();
+        }
+      }
+      c.idx = idx;
+      const onTrack = off < TW / 2;
+
+      if (c.rolling > 0) { c.rolling -= dt; if (c.rolling <= 0) { c.item = c.pending; if (c === me) updateItem(); } else if (c === me) updateItem(); }
+      c.boost = Math.max(0, c.boost - dt);
+      c.shield = Math.max(0, c.shield - dt);
+
+      let steer = 0;
+      if (c.spin > 0) {
+        c.spin -= dt;
+        c.v *= Math.pow(0.15, dt);
+      } else if (c.ai) {
+        if (c.done) { c.v *= Math.pow(0.3, dt); }
+        const look = track[(idx + 7) % N], nx = -Math.sin(look.a), ny = Math.cos(look.a);
+        const tx = look.x + nx * c.lane * TW * 0.35, ty = look.y + ny * c.lane * TW * 0.35;
+        let d = Math.atan2(ty - c.y, tx - c.x) - c.a;
+        d = ((d + Math.PI) % TAU + TAU) % TAU - Math.PI;
+        steer = W.clamp(d * 3, -1, 1);
+        if (Math.random() < dt * 0.3) c.lane = W.rand(-0.6, 0.6);
+        if (c.item) { c.itemT -= dt; if (c.itemT <= 0) useItem(c); }
+      } else {
+        steer = steerHold;
+      }
+      if (c.spin <= 0) c.a += steer * 2.4 * dt * Math.min(1, c.v / 60);
+
+      // Everyone auto-accelerates; sand slows you down; boosts go fast.
+      const top = (onTrack ? 150 : 72) * (c.ai ? c.skill : 1) * (c.boost > 0 ? 1.55 : 1) * (c.done && !c.ai ? 0.4 : 1);
+      if (state === 'race' && c.spin <= 0) c.v += (top - c.v) * Math.min(1, dt * (c.v < top ? 1.1 : 2.5));
+      c.x += Math.cos(c.a) * c.v * dt;
+      c.y += Math.sin(c.a) * c.v * dt;
+
+      for (const b of boxes) if (b.t <= 0 && Math.hypot(b.x - c.x, b.y - c.y) < 13) { b.t = 3; giveItem(c); }
+      for (const s of slicks) if (s.t > 0 && Math.hypot(s.x - c.x, s.y - c.y) < 13 && c.spin <= 0) { s.t = 0; spinOut(c); }
+    }
+
+    function update(dt) {
+      if (state === 'countdown') {
+        countdown -= dt;
+        if (countdown <= 0) state = 'race';
+      }
+      if (state === 'race' || state === 'finished') raceT += dt;
+      for (const c of cars) stepCar(c, dt);
+      // Bump cars apart.
+      for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) {
+        const a = cars[i], b = cars[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+        if (d < 14 && d > 0) { const push = (14 - d) / 2; a.x -= dx / d * push; a.y -= dy / d * push; b.x += dx / d * push; b.y += dy / d * push; }
+      }
+      for (const b of boxes) b.t = Math.max(0, b.t - dt);
+      for (const r of rockets) {
+        r.t -= dt;
+        if (r.target) {
+          let d = Math.atan2(r.target.y - r.y, r.target.x - r.x) - r.a;
+          d = ((d + Math.PI) % TAU + TAU) % TAU - Math.PI;
+          r.a += W.clamp(d, -4 * dt, 4 * dt);
+        }
+        r.x += Math.cos(r.a) * 260 * dt; r.y += Math.sin(r.a) * 260 * dt;
+        for (const c of cars) if (c !== r.owner && r.t > 0 && Math.hypot(c.x - r.x, c.y - r.y) < 12) { r.t = 0; spinOut(c); }
+      }
+      rockets = rockets.filter(r => r.t > 0);
+      for (const s of slicks) s.t -= dt;
+      slicks = slicks.filter(s => s.t > 0);
+
+      const place = ranked().indexOf(me) + 1;
+      posEl.innerHTML = `${place}<small>${['st', 'nd', 'rd'][place - 1] || 'th'}</small>`;
+      hud.innerHTML = `Lap ${Math.min(LAPS, Math.max(1, me.laps + 1))}/${LAPS}<small>${raceT.toFixed(1)}s</small>`;
+    }
+
+    function finish() {
+      state = 'finished';
+      const place = finishOrder.indexOf(me) + 1;
+      const best = W.best('buggy', place, true);
+      setTimeout(() => W.overlay({
+        title: place === 1 ? '🏆 You win!' : place <= 3 ? `🏁 ${place}${['st', 'nd', 'rd'][place - 1]} place!` : `🏁 ${place}th place`,
+        big: raceT.toFixed(1) + 's',
+        text: `Best finish: ${best}${['st', 'nd', 'rd'][best - 1] || 'th'}`,
+        button: 'Race again', onStart: start,
+      }), 900);
+    }
+
+    function drawCar(c) {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(c.a + (c.spin > 0 ? c.spin * 12 : 0));
+      if (c.boost > 0) { ctx.fillStyle = Math.random() < 0.5 ? '#ff9f0a' : '#ffd60a'; ctx.beginPath(); ctx.moveTo(-9, -3); ctx.lineTo(-17 - Math.random() * 6, 0); ctx.lineTo(-9, 3); ctx.fill(); }
+      ctx.fillStyle = '#111';
+      for (const [x, y] of [[-6, -6], [5, -6], [-6, 6], [5, 6]]) ctx.fillRect(x - 2.5, y - 1.5, 5, 3);
+      ctx.fillStyle = c.color;
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-9, -5, 18, 10, 3) : ctx.rect(-9, -5, 18, 10); ctx.fill();
+      ctx.fillStyle = '#bfe9ff';
+      ctx.fillRect(1, -3.5, 4, 7);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(-3, 0, 2.2, 0, TAU); ctx.fill();
+      if (c.shield > 0) { ctx.strokeStyle = '#64d2ff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, 13, 0, TAU); ctx.stroke(); }
+      ctx.restore();
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#3fa9f5';   // sea at the edges of the world
+      ctx.fillRect(0, 0, w, h);
+      ctx.save();
+      // Chase camera: rotate the world so your buggy always points up.
+      const Z = Math.min(w, h) / 190;
+      ctx.translate(w / 2, h * 0.68);
+      ctx.scale(Z, Z);
+      ctx.rotate(-Math.PI / 2 - me.a);
+      ctx.translate(-me.x, -me.y);
+
+      ctx.fillStyle = '#ecd9a6';
+      ctx.fillRect(-150, -100, 1300, 1150);
+      const path = () => { ctx.beginPath(); track.forEach((p, i) => ctx[i ? 'lineTo' : 'moveTo'](p.x, p.y)); ctx.closePath(); };
+      ctx.lineJoin = 'round';
+      path(); ctx.strokeStyle = '#ff453a'; ctx.lineWidth = TW + 8; ctx.stroke();
+      path(); ctx.strokeStyle = '#fff'; ctx.lineWidth = TW + 8; ctx.setLineDash([12, 12]); ctx.stroke(); ctx.setLineDash([]);
+      path(); ctx.strokeStyle = '#7a7a80'; ctx.lineWidth = TW; ctx.stroke();
+      path(); ctx.strokeStyle = '#ffffff66'; ctx.lineWidth = 2; ctx.setLineDash([10, 14]); ctx.stroke(); ctx.setLineDash([]);
+
+      // Checkered start/finish line.
+      const s0 = track[0];
+      ctx.save(); ctx.translate(s0.x, s0.y); ctx.rotate(s0.a);
+      for (let k = -TW / 2; k < TW / 2; k += 6) for (let m = 0; m < 2; m++) { ctx.fillStyle = (Math.floor(k / 6) + m) % 2 ? '#000' : '#fff'; ctx.fillRect(m * 6 - 6, k, 6, 6); }
+      ctx.restore();
+
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const s of slicks) { ctx.fillStyle = '#111c'; ctx.beginPath(); ctx.ellipse(s.x, s.y, 10, 7, 0, 0, TAU); ctx.fill(); }
+      const t = performance.now() / 1000;
+      for (const b of boxes) {
+        if (b.t > 0) continue;
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(t * 2);
+        const g = ctx.createLinearGradient(-7, -7, 7, 7);
+        g.addColorStop(0, '#ffd60a'); g.addColorStop(0.5, '#ff9f0a'); g.addColorStop(1, '#bf5af2');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-7, -7, 14, 14, 3) : ctx.rect(-7, -7, 14, 14); ctx.fill();
+        ctx.rotate(-t * 2 + Math.PI / 2 + me.a);   // keep the "?" upright on screen
+        ctx.fillStyle = '#fff'; ctx.font = '900 11px -apple-system, system-ui';
+        ctx.fillText('?', 0, 1);
+        ctx.restore();
+      }
+      for (const c of cars) if (c !== me) drawCar(c);
+      drawCar(me);
+      for (const r of rockets) {
+        ctx.save(); ctx.translate(r.x, r.y); ctx.rotate(r.a + Math.PI / 4);
+        ctx.font = '14px sans-serif'; ctx.fillStyle = '#000'; ctx.fillText('🚀', 0, 0);
+        ctx.restore();
+      }
+      // Scenery drawn upright on screen.
+      ctx.fillStyle = '#000';
+      ctx.font = '18px sans-serif';
+      for (const d of deco) {
+        if (Math.abs(d.x - me.x) > 220 || Math.abs(d.y - me.y) > 220) continue;
+        ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(Math.PI / 2 + me.a); ctx.fillText(d.e, 0, 0); ctx.restore();
+      }
+      ctx.restore();
+
+      // Minimap.
+      const mm = 44, mx = 6, my = h - mm - 6;
+      ctx.fillStyle = '#0006'; ctx.fillRect(mx, my, mm, mm);
+      ctx.strokeStyle = '#fff8'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); track.forEach((p, i) => ctx[i ? 'lineTo' : 'moveTo'](mx + 3 + p.x / 1000 * (mm - 6), my + 3 + p.y / 900 * (mm - 6))); ctx.closePath(); ctx.stroke();
+      for (const c of cars) { ctx.fillStyle = c.color; ctx.fillRect(mx + 3 + c.x / 1000 * (mm - 6) - 2, my + 3 + c.y / 900 * (mm - 6) - 2, 4, 4); }
+
+      if (state === 'countdown') {
+        ctx.fillStyle = '#fff'; ctx.font = '900 48px -apple-system, system-ui';
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
+        const n = Math.ceil(countdown);
+        ctx.strokeText(n, w / 2, h * 0.4); ctx.fillText(n, w / 2, h * 0.4);
+      } else if (raceT < 1 && state === 'race') {
+        ctx.fillStyle = '#30d158'; ctx.font = '900 34px -apple-system, system-ui';
+        ctx.fillText('GO!', w / 2, h * 0.4);
+      }
+      if (flash > 0) { flash -= dt; ctx.fillStyle = `rgba(255,69,58,${flash})`; ctx.fillRect(0, 0, w, h); }
+    }
+
+    // ---- Controls: Digital Crown steers. Touch: hold left/right side to steer, tap the middle or the item box to use items.
+    W.crown(d => { if (state === 'race' && me.spin <= 0) me.a += d * 0.009; });
+    W.pointer(canvas, {
+      down(p) { if (p.x < view.w * 0.33) steerHold = -1; else if (p.x > view.w * 0.67) steerHold = 1; else useItem(me); },
+      move(p) { if (steerHold) steerHold = p.x < view.w / 2 ? -1 : 1; },
+      up() { steerHold = 0; },
+    });
+    const fireItem = e => { e.preventDefault(); e.stopPropagation(); useItem(me); };
+    itemBtn.addEventListener('touchstart', fireItem, { passive: false });
+    itemBtn.addEventListener('mousedown', fireItem);
+    window.addEventListener('keydown', e => {
+      if (e.key === 'ArrowLeft') steerHold = -1;
+      if (e.key === 'ArrowRight') steerHold = 1;
+      if (e.key === ' ') useItem(me);
+    });
+    window.addEventListener('keyup', e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') steerHold = 0; });
+
+    function start() { reset(); state = 'countdown'; }
+    reset();
+    W.overlay({
+      title: '🏖️ Beach Buggy',
+      text: 'Turn the Crown to steer<br>(or hold left/right). Hit ❓<br>boxes, tap the middle or<br>the item box to use it!',
+      button: 'Race!', onStart: start,
+    });
+    W.loop(dt => { if (state !== 'ready') update(dt); render(dt); });
+  </script>
+</body>
+</html>

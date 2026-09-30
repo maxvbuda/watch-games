@@ -76,16 +76,17 @@ window.GAMES = [
   { id: 'five', name: 'Five', emoji: '🟩', color: '#30d158', desc: 'Guess the 5-letter word' },
   { id: 'pipes', name: 'Pipes', emoji: '🚰', color: '#64d2ff', desc: 'Rotate tiles to connect the water' },
   { id: 'penalty', name: 'Penalty Kick', emoji: '⚽️', color: '#2e8b3a', desc: 'Swipe to beat the keeper' },
+  { id: 'buggy', name: 'Beach Buggy', emoji: '🏖️', color: '#ff9f0a', desc: 'Kart racing with ❓ power-ups — Crown steers' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
 window.CATEGORIES = {
   Arcade: ['snakeio', 'blobio', 'flappy', 'stack', 'dino', 'knife', 'colorswitch', 'invaders', 'fruit', 'dodge', 'cave', 'hop',
-    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery'],
+    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy'],
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire'],
   Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty'],
   Fun: ['eightball', 'slots', 'cookie', 'plinko', 'pet'],
 };
-window.CROWN = ['safe', 'artillery', 'lander', 'pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];
+window.CROWN = ['buggy', 'safe', 'artillery', 'lander', 'pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];
