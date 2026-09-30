@@ -39,4 +39,5 @@ window.GAMES = [
   { id: 'eightball', name: 'Magic 8 Ball', emoji: '🎱', color: '#5e5ce6', desc: 'Ask it anything' },
   { id: 'rps', name: 'Rock Paper Scissors', emoji: '✌️', color: '#ff9f0a', desc: 'Outguess the watch' },
   { id: 'golf', name: 'Mini Golf', emoji: '⛳️', color: '#2f8f3f', desc: '6 holes, drag to putt', unit: ' strokes' },
+  { id: 'jumper', name: 'Jumper', emoji: '🐸', color: '#30d158', desc: 'Bounce up — crown steers' },
 ];

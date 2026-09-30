@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Jumper</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+
+    // World y grows upward. screenY = view.h - (y - camY)
+    let p, plats, camY, maxY, targetX, state = 'ready';
+    const PW = () => view.w * 0.2, PH = 5, R = () => view.w * 0.05;
+
+    function addPlat(y) {
+      const hgt = y / view.h;
+      const roll = Math.random();
+      const kind = hgt > 3 && roll < 0.2 ? 'move' : hgt > 6 && roll < 0.3 ? 'break' : 'solid';
+      plats.push({ x: W.rand(0, view.w - PW()), y, kind, vx: kind === 'move' ? view.w * 0.3 * (Math.random() < 0.5 ? 1 : -1) : 0, spring: kind === 'solid' && Math.random() < 0.08 });
+    }
+
+    function reset() {
+      p = { x: view.w / 2, y: 40, vx: 0, vy: 0 };
+      targetX = null;
+      plats = [{ x: view.w / 2 - PW() / 2, y: 20, kind: 'solid', vx: 0 }];
+      camY = 0; maxY = 0;
+      let y = 20;
+      while (y < view.h * 2) { y += W.rand(view.h * 0.12, view.h * 0.2); addPlat(y); }
+      hud.textContent = '0';
+    }
+
+    function update(dt) {
+      const g = view.h * 2.6, jump = view.h * 1.45;
+      p.vy -= g * dt;
+      if (targetX !== null) {
+        // Steer toward the finger (wrap-aware), or coast with crown input.
+        let dx = targetX - p.x;
+        if (Math.abs(dx) > view.w / 2) dx -= Math.sign(dx) * view.w;
+        p.vx = W.clamp(dx * 8, -view.w * 1.5, view.w * 1.5);
+      } else p.vx *= Math.pow(0.02, dt);
+      const prevY = p.y;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (p.x < 0) p.x += view.w;
+      if (p.x > view.w) p.x -= view.w;
+
+      for (const pl of plats) {
+        if (pl.kind === 'move') {
+          pl.x += pl.vx * dt;
+          if (pl.x < 0 || pl.x > view.w - PW()) pl.vx *= -1;
+        }
+        // Land only when falling through the top of a platform.
+        if (p.vy < 0 && prevY - R() >= pl.y && p.y - R() <= pl.y && p.x > pl.x - 4 && p.x < pl.x + PW() + 4 && !pl.broken) {
+          if (pl.kind === 'break') { pl.broken = true; continue; }
+          p.y = pl.y + R();
+          p.vy = pl.spring ? jump * 1.7 : jump;
+        }
+      }
+      for (const pl of plats) if (pl.broken) pl.y -= view.h * 1.5 * dt;
+
+      if (p.y > maxY) { maxY = p.y; hud.textContent = Math.floor(maxY / 10); }
+      camY = Math.max(camY, p.y - view.h * 0.45);
+      plats = plats.filter(pl => pl.y > camY - 20);
+      let top = Math.max(...plats.map(pl => pl.y));
+      const diff = Math.min(camY / view.h / 30, 1);
+      while (top < camY + view.h * 1.5) { top += W.rand(view.h * (0.12 + diff * 0.08), view.h * (0.2 + diff * 0.1)); addPlat(top); }
+
+      if (p.y < camY - 30) {
+        state = 'over';
+        const s = Math.floor(maxY / 10);
+        const best = W.best('jumper', s);
+        setTimeout(() => W.overlay({ title: 'Fell!', big: s, text: `Best ${best}`, button: 'Again', onStart: start }), 300);
+      }
+    }
+
+    const sy = y => view.h - (y - camY);
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#fdf6e3';
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#e8dcc0';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let y = (camY % 16); y < h; y += 16) { ctx.moveTo(0, h - y); ctx.lineTo(w, h - y); }
+      ctx.stroke();
+      for (const pl of plats) {
+        ctx.fillStyle = pl.kind === 'move' ? '#0a84ff' : pl.kind === 'break' ? '#a0703c' : '#30d158';
+        ctx.fillRect(pl.x, sy(pl.y), PW(), PH);
+        if (pl.spring) { ctx.fillStyle = '#8e8e93'; ctx.fillRect(pl.x + PW() / 2 - 3, sy(pl.y) - 5, 6, 5); }
+      }
+      const r = R();
+      ctx.fillStyle = '#000';
+      ctx.font = `${Math.round(r * 2.4)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🐸', p.x, sy(p.y));
+      if (p.x < r) ctx.fillText('🐸', p.x + w, sy(p.y));
+      if (p.x > w - r) ctx.fillText('🐸', p.x - w, sy(p.y));
+    }
+
+    W.pointer(canvas, { down: q => (targetX = q.x), move: q => (targetX = q.x), up: () => (targetX = null) });
+    W.crown(d => { if (state === 'play') { targetX = null; p.vx = W.clamp(p.vx + d * 12, -view.w * 1.4, view.w * 1.4); } });
+    const keys = {};
+    window.addEventListener('keydown', e => (keys[e.key] = true));
+    window.addEventListener('keyup', e => (keys[e.key] = false));
+
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🐸 Jumper', text: 'Turn the Crown or hold<br>left/right to steer.<br>Climb as high as you can!', onStart: start });
+    W.loop(dt => {
+      if (keys.ArrowLeft) p.vx = -view.w;
+      if (keys.ArrowRight) p.vx = view.w;
+      if (state === 'play') update(dt);
+      render();
+    });
+  </script>
+</body>
+</html>
