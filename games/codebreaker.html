@@ -84,7 +84,7 @@
       $('rows').scrollTop = 1e6;
       $('cur').innerHTML = pegRow(guess, 'set') + '<div class="peg"></div>'.repeat(LEN - guess.length);
       $('go').disabled = guess.length < LEN || done;
-      $('hud').innerHTML = `${history.length}/${TRIES}<small>🟢 right spot · ⚪ wrong spot</small>`;
+      $('hud').innerHTML = `${history.length}/${TRIES}<small>tries</small>`;
     }
 
     function start() { secret = Array.from({ length: LEN }, () => W.randInt(0, COLORS.length - 1)); guess = []; history = []; done = false; draw(); }
