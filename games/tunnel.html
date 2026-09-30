@@ -22,7 +22,7 @@
     let pa, rings, speed, score, spawnT, state = 'ready', t = 0, hue = 0, holdDir = 0;
     const R = () => Math.min(view.w, view.h) * 0.46;
 
-    function reset() { pa = Math.PI / 2; rings = []; speed = 0.42; score = 0; spawnT = 0.3; hud.textContent = '0'; }
+    function reset() { pa = Math.PI / 2; rings = []; speed = 1.25; score = 0; spawnT = 0.3; hud.textContent = '0'; }
 
     function spawn() {
       const gap = Math.max(0.9, 1.9 - score * 0.03);
@@ -33,7 +33,7 @@
 
     function update(dt) {
       t += dt;
-      speed = Math.min(1.1, speed + dt * 0.006);
+      speed = Math.min(2.4, speed + dt * 0.012);
       pa += holdDir * 4 * dt;
       spawnT -= dt;
       if (spawnT <= 0) { spawn(); spawnT = Math.max(0.55, 1.15 - score * 0.012); }

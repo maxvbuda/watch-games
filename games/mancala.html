@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Mancala</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 30px 4px max(4px, env(safe-area-inset-bottom)); gap: 4px; }
+    #board { display: grid; grid-template-columns: 1fr repeat(6, 1.1fr) 1fr; grid-template-rows: 1fr 1fr; gap: 3px; background: #8b5a2b; border-radius: 12px; padding: 4px; height: min(60vh, 140px); }
+    .pit, .store {
+      border-radius: 50%; background: #5c3a1a; color: #fff; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums; border: 0; font-family: inherit; padding: 0;
+    }
+    .store { grid-row: 1 / 3; border-radius: 12px; font-size: 16px; }
+    .pit.mine { background: #6b4a24; }
+    .pit.mine.can { box-shadow: inset 0 0 0 2px #30d158; }
+    .pit.flash { background: #ffd60a; color: #000; }
+    #msg { text-align: center; font-size: 11px; color: var(--muted); min-height: 28px; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="msg"></div>
+    <div id="board"></div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    // pits[0..5] = yours (left→right on bottom), pits[6] = your store,
+    // pits[7..12] = watch (right→left on top), pits[13] = watch store. Sowing is counter-clockwise.
+    const $ = id => document.getElementById(id);
+    let pits, turn, busy, tally = { w: 0, l: 0 };
+    const els = {};
+
+    function build() {
+      const b = $('board');
+      b.innerHTML = '';
+      const add = (i, cls, col, row) => {
+        const e = document.createElement('button');
+        e.className = cls;
+        e.style.gridColumn = col; e.style.gridRow = row;
+        if (i < 6) e.addEventListener('click', () => { if (turn === 1 && !busy && pits[i]) move(i); });
+        b.appendChild(e);
+        els[i] = e;
+      };
+      add(13, 'store', 1, '1 / 3');
+      for (let k = 0; k < 6; k++) add(12 - k, 'pit', k + 2, 1);
+      for (let k = 0; k < 6; k++) add(k, 'pit mine', k + 2, 2);
+      add(6, 'store', 8, '1 / 3');
+    }
+
+    function draw(flash = -1) {
+      for (let i = 0; i < 14; i++) {
+        els[i].textContent = pits[i];
+        els[i].classList.toggle('can', i < 6 && turn === 1 && !busy && pits[i] > 0);
+        els[i].classList.toggle('flash', i === flash);
+      }
+      $('hud').innerHTML = `${tally.w}–${tally.l}`;
+    }
+
+    // Pure sow on a copy; returns { pits, again }.
+    function sow(p, i, player) {
+      p = [...p];
+      let n = p[i]; p[i] = 0; let j = i;
+      const skip = player === 1 ? 13 : 6;
+      while (n) { j = (j + 1) % 14; if (j === skip) continue; p[j]++; n--; }
+      const own = player === 1 ? j < 6 : j > 6 && j < 13;
+      if (own && p[j] === 1 && p[12 - j] > 0) {   // capture
+        const store = player === 1 ? 6 : 13;
+        p[store] += p[12 - j] + 1; p[12 - j] = 0; p[j] = 0;
+      }
+      return { p, again: j === (player === 1 ? 6 : 13), last: j };
+    }
+
+    const sideEmpty = p => p.slice(0, 6).every(v => !v) || p.slice(7, 13).every(v => !v);
+
+    async function move(i) {
+      busy = true;
+      const player = turn;
+      // Animate the sowing one stone at a time.
+      let n = pits[i]; pits[i] = 0; let j = i;
+      const skip = player === 1 ? 13 : 6;
+      draw(i);
+      while (n) {
+        j = (j + 1) % 14; if (j === skip) continue;
+        pits[j]++; n--;
+        draw(j);
+        await new Promise(r => setTimeout(r, 110));
+      }
+      const own = player === 1 ? j < 6 : j > 6 && j < 13;
+      if (own && pits[j] === 1 && pits[12 - j] > 0) {
+        const store = player === 1 ? 6 : 13;
+        pits[store] += pits[12 - j] + 1; pits[12 - j] = 0; pits[j] = 0;
+        $('msg').textContent = player === 1 ? 'Capture! 🎉' : 'Watch captured!';
+      }
+      const again = j === (player === 1 ? 6 : 13);
+      if (sideEmpty(pits)) return finish();
+      if (!again) turn = 3 - turn;
+      else $('msg').textContent = player === 1 ? 'Landed in your store — go again!' : 'Watch goes again';
+      busy = false;
+      draw();
+      if (turn === 2) setTimeout(ai, 500);
+    }
+
+    function ai() {
+      // Greedy with one-ply lookahead: maximise store difference, prefer extra turns.
+      let best = -1, bestScore = -Infinity;
+      for (let i = 7; i < 13; i++) {
+        if (!pits[i]) continue;
+        const r = sow(pits, i, 2);
+        let s = r.p[13] - r.p[6] + (r.again ? 3 : 0);
+        if (!r.again) {
+          let worst = 0;
+          for (let k = 0; k < 6; k++) if (r.p[k]) { const o = sow(r.p, k, 1); worst = Math.max(worst, o.p[6] - r.p[6] + (o.again ? 2 : 0)); }
+          s -= worst;
+        }
+        s += Math.random() * 0.5;
+        if (s > bestScore) { bestScore = s; best = i; }
+      }
+      move(best);
+    }
+
+    function finish() {
+      for (let i = 0; i < 6; i++) { pits[6] += pits[i]; pits[i] = 0; }
+      for (let i = 7; i < 13; i++) { pits[13] += pits[i]; pits[i] = 0; }
+      const me = pits[6], ai = pits[13];
+      if (me > ai) { tally.w++; W.best('mancala', tally.w); } else if (ai > me) tally.l++;
+      busy = true;
+      draw();
+      setTimeout(() => W.overlay({ title: me > ai ? 'You win! 🎉' : me < ai ? 'Watch wins 🤖' : 'Tie', big: `${me}–${ai}`, text: `Session ${tally.w}–${tally.l}`, button: 'Again', onStart: start }), 600);
+    }
+
+    function start() {
+      pits = [4, 4, 4, 4, 4, 4, 0, 4, 4, 4, 4, 4, 4, 0];
+      turn = 1; busy = false;
+      $('msg').textContent = 'Tap one of your pits (bottom row) to sow';
+      draw();
+    }
+    build();
+    start();
+  </script>
+</body>
+</html>
