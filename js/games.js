@@ -79,6 +79,7 @@ window.GAMES = [
   { id: 'penalty', name: 'Penalty Kick', emoji: '⚽️', color: '#2e8b3a', desc: 'Swipe to beat the keeper' },
   { id: 'homerun', name: 'Home Run Derby', emoji: '⚾️', color: '#2e7d32', desc: 'Time your swing for homers' },
   { id: 'duckhunt', name: 'Duck Hunt', emoji: '🦆', color: '#5ac8fa', desc: 'Tap the ducks, 3 shots each' },
+  { id: 'checkers', name: 'Checkers', emoji: '👑', color: '#8b5a2b', desc: 'Jump and king vs the watch' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
@@ -87,7 +88,7 @@ window.CATEGORIES = {
     'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt'],
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five'],
-  Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire'],
+  Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers'],
   Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty', 'homerun'],
   Fun: ['eightball', 'slots', 'cookie', 'plinko', 'pet'],
 };

@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Checkers</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const N = 8;
+    let cell, ox, oy;
+    const view = W.setupCanvas(canvas, (w, h) => {
+      cell = Math.floor(Math.min(w - 4, h - 34) / N);
+      ox = Math.floor((w - cell * N) / 2);
+      oy = h - cell * N - 3;
+    });
+    const ctx = view.ctx;
+
+    // Squares: 0 empty, 1 your man, 3 your king, 2 watch man, 4 watch king. You move up the board.
+    const owner = v => (v ? (v % 2 ? 1 : 2) : 0);
+    const isKing = v => v > 2;
+    let b, turn, sel, busy, over, last, tally = { w: 0, l: 0 };
+
+    function dirsFor(v) {
+      if (isKing(v)) return [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+      return owner(v) === 1 ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]];
+    }
+    const inB = (r, c) => r >= 0 && c >= 0 && r < N && c < N;
+
+    // All jump sequences from a square (multi-jumps included; crowning ends the turn).
+    function jumps(bd, r, c, v, path, caps) {
+      const out = [];
+      for (const [dr, dc] of dirsFor(v)) {
+        const mr = r + dr, mc = c + dc, tr = r + 2 * dr, tc = c + 2 * dc;
+        if (!inB(tr, tc) || bd[tr * N + tc] || owner(bd[mr * N + mc]) !== 3 - owner(v) || caps.includes(mr * N + mc)) continue;
+        const np = [...path, tr * N + tc], nc = [...caps, mr * N + mc];
+        const crowned = !isKing(v) && (tr === 0 || tr === N - 1);
+        const saved = bd[r * N + c];
+        bd[r * N + c] = 0;
+        const more = crowned ? [] : jumps(bd, tr, tc, v, np, nc);
+        bd[r * N + c] = saved;
+        if (more.length) out.push(...more); else out.push({ path: np, caps: nc });
+      }
+      return out;
+    }
+
+    function moves(bd, p) {
+      const caps = [], simple = [];
+      for (let i = 0; i < N * N; i++) {
+        if (owner(bd[i]) !== p) continue;
+        const r = Math.floor(i / N), c = i % N;
+        for (const j of jumps(bd, r, c, bd[i], [], [])) caps.push({ from: i, ...j });
+        for (const [dr, dc] of dirsFor(bd[i])) {
+          const tr = r + dr, tc = c + dc;
+          if (inB(tr, tc) && !bd[tr * N + tc]) simple.push({ from: i, path: [tr * N + tc], caps: [] });
+        }
+      }
+      return caps.length ? caps : simple;   // captures are compulsory
+    }
+
+    function apply(bd, m) {
+      const nb = [...bd];
+      let v = nb[m.from];
+      nb[m.from] = 0;
+      for (const c of m.caps) nb[c] = 0;
+      const to = m.path[m.path.length - 1], r = Math.floor(to / N);
+      if (!isKing(v) && ((owner(v) === 1 && r === 0) || (owner(v) === 2 && r === N - 1))) v += 2;
+      nb[to] = v;
+      return nb;
+    }
+
+    function evaluate(bd) {
+      let s = 0;
+      bd.forEach((v, i) => {
+        if (!v) return;
+        const r = Math.floor(i / N);
+        const val = isKing(v) ? 1.7 : 1 + (owner(v) === 2 ? r : N - 1 - r) * 0.04;
+        s += owner(v) === 2 ? val : -val;
+      });
+      return s;
+    }
+
+    function search(bd, depth, alpha, beta, p) {
+      const ms = moves(bd, p);
+      if (!ms.length) return p === 2 ? -100 - depth : 100 + depth;
+      if (depth === 0) return evaluate(bd);
+      if (p === 2) {
+        let best = -Infinity;
+        for (const m of ms) { best = Math.max(best, search(apply(bd, m), depth - 1, alpha, beta, 1)); alpha = Math.max(alpha, best); if (alpha >= beta) break; }
+        return best;
+      }
+      let best = Infinity;
+      for (const m of ms) { best = Math.min(best, search(apply(bd, m), depth - 1, alpha, beta, 2)); beta = Math.min(beta, best); if (alpha >= beta) break; }
+      return best;
+    }
+
+    function aiMove() {
+      let best = null, bs = -Infinity;
+      for (const m of moves(b, 2)) {
+        const s = search(apply(b, m), 4, -Infinity, Infinity, 1) + Math.random() * 0.05;
+        if (s > bs) { bs = s; best = m; }
+      }
+      return best;
+    }
+
+    function play(m) {
+      b = apply(b, m);
+      last = m;
+      turn = 3 - turn;
+      sel = null;
+      updateHud();
+      const next = moves(b, turn);
+      if (!next.length) return finish(3 - turn);
+      if (turn === 2) {
+        busy = true;
+        setTimeout(() => { busy = false; play(aiMove()); }, 350);
+      }
+    }
+
+    function finish(winner) {
+      over = true;
+      if (winner === 1) { tally.w++; W.best('checkers', tally.w); } else tally.l++;
+      updateHud();
+      setTimeout(() => W.overlay({ title: winner === 1 ? 'You win! 👑' : 'Watch wins 🤖', text: `Session ${tally.w}–${tally.l}`, button: 'Again', onStart: start }), 600);
+    }
+
+    const count = p => b.filter(v => owner(v) === p).length;
+    function updateHud() { hud.innerHTML = `🔴${count(1)} ⚫${count(2)}<small>${over ? '' : turn === 1 ? 'your turn' : 'thinking…'}</small>`; }
+
+    function tap(p) {
+      if (over || busy || turn !== 1) return;
+      const c = Math.floor((p.x - ox) / cell), r = Math.floor((p.y - oy) / cell);
+      if (!inB(r, c)) return;
+      const i = r * N + c;
+      const legal = moves(b, 1);
+      if (owner(b[i]) === 1 && legal.some(m => m.from === i)) { sel = i; return; }
+      if (sel !== null) {
+        const m = legal.find(m => m.from === sel && m.path[m.path.length - 1] === i);
+        if (m) play(m); else sel = null;
+      }
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      const legal = turn === 1 && !over ? moves(b, 1) : [];
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        ctx.fillStyle = (r + c) % 2 ? '#8b5a2b' : '#e8d3a0';
+        ctx.fillRect(ox + c * cell, oy + r * cell, cell, cell);
+      }
+      if (last) for (const s of [last.from, ...last.path]) { ctx.fillStyle = '#ffd60a33'; ctx.fillRect(ox + (s % N) * cell, oy + Math.floor(s / N) * cell, cell, cell); }
+      // Pieces that must/can move get a subtle ring; selected piece shows its targets.
+      const movable = new Set(legal.map(m => m.from));
+      for (let i = 0; i < N * N; i++) {
+        const v = b[i];
+        if (!v) continue;
+        const x = ox + (i % N + 0.5) * cell, y = oy + (Math.floor(i / N) + 0.5) * cell;
+        ctx.fillStyle = owner(v) === 1 ? '#ff453a' : '#1c1c1e';
+        ctx.beginPath(); ctx.arc(x, y, cell * 0.4, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = owner(v) === 1 ? '#ff8a80' : '#48484a'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x, y, cell * 0.28, 0, Math.PI * 2); ctx.stroke();
+        if (isKing(v)) { ctx.font = `${Math.round(cell * 0.45)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.fillText('👑', x, y + 1); }
+        if (i === sel) { ctx.strokeStyle = '#30d158'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, cell * 0.44, 0, Math.PI * 2); ctx.stroke(); }
+        else if (movable.has(i) && sel === null) { ctx.strokeStyle = '#30d15888'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, cell * 0.44, 0, Math.PI * 2); ctx.stroke(); }
+      }
+      if (sel !== null) for (const m of legal.filter(m => m.from === sel)) {
+        const t = m.path[m.path.length - 1];
+        ctx.fillStyle = '#30d158aa';
+        ctx.beginPath(); ctx.arc(ox + (t % N + 0.5) * cell, oy + (Math.floor(t / N) + 0.5) * cell, cell * 0.16, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    W.pointer(canvas, { down: tap });
+    function start() {
+      b = new Array(N * N).fill(0);
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if ((r + c) % 2) { if (r < 3) b[r * N + c] = 2; if (r > 4) b[r * N + c] = 1; }
+      turn = 1; sel = null; busy = false; over = false; last = null;
+      updateHud();
+    }
+    start();
+    W.overlay({ title: '🔴 Checkers', text: 'Tap a piece, then where to<br>move it. Jumps are forced!<br>Reach the far side to king.', onStart() {} });
+    W.loop(render);
+  </script>
+</body>
+</html>
