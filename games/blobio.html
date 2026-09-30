@@ -6,8 +6,17 @@
   <meta name="disable-adaptations" content="watch">
   <title>Blob.io</title>
   <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    /* Digital Crown support: the crown scrolls the page, so the page is made
+       scrollable (a tall invisible spacer) while everything visible stays fixed. */
+    body.game.crown { position: static; overflow-y: scroll; scrollbar-width: none; }
+    body.game.crown::-webkit-scrollbar { display: none; }
+    body.crown canvas.full, body.crown .hud, body.crown .back, body.crown .overlay { position: fixed; }
+    #crown-spacer { height: 200000px; width: 1px; pointer-events: none; }
+  </style>
 </head>
-<body class="game">
+<body class="game crown">
+  <div id="crown-spacer"></div>
   <canvas id="c" class="full"></canvas>
   <div class="hud" id="hud"></div>
   <script src="../js/common.js"></script>
@@ -179,6 +188,16 @@
           ctx.fillText(b.name, b.x, b.y);
         }
       }
+      // Arrow on your blob's edge showing where you're heading.
+      if (player.alive && steer) {
+        const a = Math.atan2(steer.y, steer.x), r = radius(player.mass), s = 6 / cam.z;
+        ctx.save();
+        ctx.translate(player.x + Math.cos(a) * (r + s * 1.2), player.y + Math.sin(a) * (r + s * 1.2));
+        ctx.rotate(a);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.beginPath(); ctx.moveTo(s, 0); ctx.lineTo(-s * 0.6, -s * 0.8); ctx.lineTo(-s * 0.6, s * 0.8); ctx.fill();
+        ctx.restore();
+      }
       ctx.restore();
 
       const alive = blobs.filter(b => b.alive).sort((a, b) => b.mass - a.mass);
@@ -194,6 +213,25 @@
       steer = d < 4 ? null : { x: (dx / d) * Math.min(1, d / full), y: (dy / d) * Math.min(1, d / full) };
     }
     W.pointer(canvas, { down: setSteer, move: setSteer, hover: true });
+
+    // Digital Crown: every pixel scrolled rotates your heading. Scroll down = clockwise.
+    const CROWN_TURN = 0.016;  // radians per scrolled pixel
+    const MID = 100000;
+    let lastScroll = MID;
+    window.scrollTo(0, MID);
+    window.addEventListener('scroll', () => {
+      const y = window.scrollY;
+      const delta = y - lastScroll;
+      lastScroll = y;
+      if (running && delta) {
+        const cur = steer ? Math.atan2(steer.y, steer.x)
+          : (player.vx || player.vy) ? Math.atan2(player.vy, player.vx) : -Math.PI / 2;
+        const a = cur + delta * CROWN_TURN;
+        steer = { x: Math.cos(a), y: Math.sin(a) };
+      }
+      // Recentre long before hitting either end of the spacer.
+      if (Math.abs(y - MID) > 60000) { window.scrollTo(0, MID); lastScroll = MID; }
+    }, { passive: true });
     const keys = {};
     window.addEventListener('keydown', e => { keys[e.key] = true; keySteer(); });
     window.addEventListener('keyup', e => { keys[e.key] = false; keySteer(); });
@@ -217,7 +255,7 @@
     }
 
     reset();
-    W.overlay({ title: '🟢 Blob.io', text: 'Touch to steer.<br>Eat smaller blobs,<br>run from bigger ones!', onStart: start });
+    W.overlay({ title: '🟢 Blob.io', text: 'Turn the Digital Crown<br>(or touch) to steer.<br>Eat smaller blobs!', onStart: start });
 
     W.loop(dt => {
       if (running) update(dt);
