@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <meta name="theme-color" content="#000000">
+  <title>Watch Games</title>
+  <link rel="stylesheet" href="css/watch.css">
+</head>
+<body>
+  <main class="hub">
+    <h1>Watch Games</h1>
+    <p class="sub" id="count"></p>
+    <nav class="list" id="list"></nav>
+  </main>
+  <script src="js/common.js"></script>
+  <script src="js/games.js"></script>
+  <script>
+    const list = document.getElementById('list');
+    document.getElementById('count').textContent = GAMES.length + (GAMES.length === 1 ? ' game' : ' games') + ' · tap to play';
+    for (const g of GAMES) {
+      const best = W.best(g.id);
+      const a = document.createElement('a');
+      a.className = 'tile';
+      a.href = 'games/' + g.id + '.html';
+      a.innerHTML =
+        `<span class="ico" style="background:${g.color}33">${g.emoji}</span>` +
+        `<span><div class="name">${g.name}</div><div class="desc">${g.desc}</div>` +
+        (best !== null ? `<div class="best">Best ${best}</div>` : '') +
+        `</span>`;
+      list.appendChild(a);
+    }
+  </script>
+</body>
+</html>
