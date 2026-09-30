@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Code Breaker</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 30px 6px max(4px, env(safe-area-inset-bottom)); gap: 4px; }
+    #rows { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+    .row { display: flex; align-items: center; gap: 4px; }
+    .peg { width: 20px; height: 20px; border-radius: 50%; background: #2c2c2e; flex: none; }
+    .fb { display: grid; grid-template-columns: repeat(2, 7px); gap: 2px; margin-left: 6px; }
+    .fb span { width: 7px; height: 7px; border-radius: 50%; background: #3a3a3c; }
+    .fb .b { background: #30d158; }
+    .fb .w { background: #fff; }
+    #cur .peg { border: 2px dashed #48484a; }
+    #cur .peg.set { border: 0; }
+    #pal { display: flex; gap: 4px; }
+    #pal button { flex: 1; height: 28px; border: 0; border-radius: 14px; }
+    #ctrl { display: flex; gap: 4px; }
+    #ctrl button { flex: 1; border: 0; border-radius: 14px; font: inherit; font-size: 12px; font-weight: 700; padding: 6px; background: #2c2c2e; color: #fff; }
+    #ctrl #go { background: #0a84ff; }
+    #ctrl button:disabled { opacity: 0.3; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="rows"></div>
+    <div class="row" id="cur"></div>
+    <div id="pal"></div>
+    <div id="ctrl"><button id="del">⌫</button><button id="go">Check</button></div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const COLORS = ['#ff453a', '#ffd60a', '#30d158', '#0a84ff', '#bf5af2', '#ff9f0a'];
+    const LEN = 4, TRIES = 8;
+    const $ = id => document.getElementById(id);
+    let secret, guess, history, done, streak = 0;
+
+    COLORS.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.style.background = c;
+      b.addEventListener('click', () => { if (!done && guess.length < LEN) { guess.push(i); draw(); } });
+      $('pal').appendChild(b);
+    });
+    $('del').addEventListener('click', () => { guess.pop(); draw(); });
+    $('go').addEventListener('click', check);
+
+    function score(g) {
+      let black = 0, white = 0;
+      const sc = [], gc = [];
+      g.forEach((v, i) => { if (v === secret[i]) black++; else { sc.push(secret[i]); gc.push(v); } });
+      for (const v of gc) { const k = sc.indexOf(v); if (k >= 0) { white++; sc.splice(k, 1); } }
+      return [black, white];
+    }
+
+    function check() {
+      if (done || guess.length < LEN) return;
+      const [b, w] = score(guess);
+      history.push({ g: guess, b, w });
+      guess = [];
+      draw();
+      if (b === LEN || history.length >= TRIES) {
+        done = true;
+        const won = b === LEN;
+        streak = won ? streak + 1 : 0;
+        if (won) W.best('codebreaker', history.length, true);
+        const reveal = secret.map(c => `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${COLORS[c]};margin:0 2px"></span>`).join('');
+        setTimeout(() => W.overlay({ title: won ? 'Cracked it! 🔓' : 'Locked out 🔒', big: won ? history.length + ' tries' : undefined, text: `Code: ${reveal}`, button: 'New code', onStart: start }), 400);
+      }
+    }
+
+    function pegRow(g, cls = '') {
+      return g.map(c => `<div class="peg ${cls}" style="background:${COLORS[c]}"></div>`).join('');
+    }
+
+    function draw() {
+      $('rows').innerHTML = history.map(h =>
+        `<div class="row">${pegRow(h.g)}<div class="fb">${'<span class="b"></span>'.repeat(h.b)}${'<span class="w"></span>'.repeat(h.w)}${'<span></span>'.repeat(LEN - h.b - h.w)}</div></div>`
+      ).join('');
+      $('rows').scrollTop = 1e6;
+      $('cur').innerHTML = pegRow(guess, 'set') + '<div class="peg"></div>'.repeat(LEN - guess.length);
+      $('go').disabled = guess.length < LEN || done;
+      $('hud').innerHTML = `${history.length}/${TRIES}<small>🟢 right spot · ⚪ wrong spot</small>`;
+    }
+
+    function start() { secret = Array.from({ length: LEN }, () => W.randInt(0, COLORS.length - 1)); guess = []; history = []; done = false; draw(); }
+    start();
+    W.overlay({ title: '🔐 Code Breaker', text: `Guess the 4-colour code<br>in ${TRIES} tries. 🟢 = right colour<br>& spot, ⚪ = right colour.`, onStart() {} });
+  </script>
+</body>
+</html>
