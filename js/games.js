@@ -47,4 +47,5 @@ window.GAMES = [
   { id: 'racer', name: 'Racer', emoji: '🏎️', color: '#ff453a', desc: 'Crown steers through traffic' },
   { id: 'hangman', name: 'Word Guess', emoji: '⛄', color: '#64d2ff', desc: 'Guess the word, save the snowman' },
   { id: 'airhockey', name: 'Air Hockey', emoji: '🏒', color: '#64d2ff', desc: 'First to 5 vs the watch' },
+  { id: 'slots', name: 'Slots', emoji: '🎰', color: '#c9302c', desc: 'Spin — the Crown pulls the lever', unit: ' credits' },
 ];

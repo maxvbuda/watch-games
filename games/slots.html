@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Slots</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 30px 6px max(6px, env(safe-area-inset-bottom)); gap: 6px; }
+    #machine { display: flex; gap: 4px; padding: 6px; border-radius: 14px; background: linear-gradient(#c9302c, #8b1a17); }
+    .reel { flex: 1; height: 64px; border-radius: 8px; background: #fff; overflow: hidden; position: relative; }
+    .strip { position: absolute; left: 0; right: 0; top: 0; }
+    .strip div { height: 64px; display: flex; align-items: center; justify-content: center; font-size: 36px; }
+    #msg { text-align: center; font-size: 14px; font-weight: 800; min-height: 18px; }
+    #spin { border: 0; border-radius: 22px; background: #ffd60a; color: #000; font: inherit; font-size: 16px; font-weight: 800; padding: 10px; }
+    #spin:disabled { opacity: 0.4; }
+    #pays { font-size: 9px; color: var(--muted); text-align: center; line-height: 1.4; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="machine"><div class="reel"><div class="strip"></div></div><div class="reel"><div class="strip"></div></div><div class="reel"><div class="strip"></div></div></div>
+    <div id="msg">Tap spin or flick the Crown</div>
+    <button id="spin">SPIN (5)</button>
+    <div id="pays">7️⃣×100 💎×50 ⭐️×25 🔔×15 🍋×10 🍒×5 · 🍒🍒 ×2</div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    // Weighted symbols: common ones appear more on each reel.
+    const SYMS = [['🍒', 6, 5], ['🍋', 5, 10], ['🔔', 4, 15], ['⭐️', 3, 25], ['💎', 2, 50], ['7️⃣', 1, 100]];
+    const BAG = SYMS.flatMap(([s, w]) => Array(w).fill(s));
+    const BET = 5;
+    const $ = id => document.getElementById(id);
+    const strips = [...document.querySelectorAll('.strip')];
+    let credits = 100, spinning = false;
+
+    function hud() { $('hud').innerHTML = `${credits}<small>credits</small>`; }
+
+    function spin() {
+      if (spinning) return;
+      if (credits < BET) { credits = 100; $('msg').textContent = 'Refilled to 100!'; hud(); return; }
+      spinning = true;
+      credits -= BET;
+      hud();
+      $('spin').disabled = true;
+      $('msg').textContent = '';
+      const result = [W.pick(BAG), W.pick(BAG), W.pick(BAG)];
+      strips.forEach((strip, i) => {
+        // Fill the strip with random symbols ending on the result, then scroll to it.
+        const n = 16 + i * 6;
+        strip.innerHTML = Array.from({ length: n }, (_, k) => `<div>${k === n - 1 ? result[i] : W.pick(BAG)}</div>`).join('');
+        strip.style.transition = 'none';
+        strip.style.transform = 'translateY(0)';
+        void strip.offsetHeight;
+        strip.style.transition = `transform ${0.9 + i * 0.35}s cubic-bezier(.2,.7,.25,1)`;
+        strip.style.transform = `translateY(-${(n - 1) * 64}px)`;
+      });
+      setTimeout(() => finish(result), 900 + 2 * 350 + 100);
+    }
+
+    function finish(r) {
+      let win = 0;
+      if (r[0] === r[1] && r[1] === r[2]) win = BET * SYMS.find(s => s[0] === r[0])[2];
+      else if (r.filter(s => s === '🍒').length === 2) win = BET * 2;
+      credits += win;
+      W.best('slots', credits);
+      $('msg').textContent = win >= BET * 25 ? `JACKPOT! +${win} 🎉` : win ? `Win +${win}!` : 'No luck';
+      $('msg').style.color = win ? '#ffd60a' : '';
+      $('spin').disabled = false;
+      $('spin').textContent = credits < BET ? 'REFILL' : `SPIN (${BET})`;
+      spinning = false;
+      hud();
+    }
+
+    $('spin').addEventListener('click', spin);
+    let acc = 0;
+    W.crown(d => { acc += d; if (Math.abs(acc) > 60) { acc = 0; spin(); } });
+    strips.forEach(s => (s.innerHTML = `<div>${W.pick(BAG)}</div>`));
+    hud();
+  </script>
+</body>
+</html>
