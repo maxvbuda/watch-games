@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Chimp Test</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 28px; }
+    #grid {
+      --size: min(96vw, calc(100vh - 34px));
+      width: var(--size); height: var(--size);
+      display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); gap: 3px;
+    }
+    .b { border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: calc(var(--size) / 8); }
+    .b.n { background: #fff; color: #000; }
+    .b.hidden { color: transparent; }
+    .b.gone { visibility: hidden; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="grid"></div></div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    let count, next, strikes, live;
+
+    // Numbers appear in random squares. After you tap 1, the rest hide — remember where they were!
+    function round() {
+      $('grid').innerHTML = '';
+      const spots = [...Array(25).keys()].sort(() => Math.random() - 0.5).slice(0, count);
+      const at = {};
+      spots.forEach((s, i) => (at[s] = i + 1));
+      for (let i = 0; i < 25; i++) {
+        const d = document.createElement('div');
+        d.className = 'b' + (at[i] ? ' n' : '');
+        if (at[i]) {
+          d.textContent = at[i];
+          const hit = e => { e.preventDefault(); tap(at[i], d); };
+          d.addEventListener('touchstart', hit, { passive: false });
+          d.addEventListener('mousedown', hit);
+        }
+        $('grid').appendChild(d);
+      }
+      next = 1;
+      live = true;
+      hud();
+    }
+
+    function tap(n, d) {
+      if (!live) return;
+      if (n !== next) {
+        live = false;
+        strikes++;
+        d.style.background = '#ff453a';
+        document.querySelectorAll('.b.n').forEach(e => e.classList.remove('hidden'));
+        if (strikes >= 3) {
+          const best = W.best('chimp', count - 1);
+          setTimeout(() => W.overlay({ title: 'Out of lives', big: count - 1, text: `Numbers remembered · best ${best}`, button: 'Again', onStart: start }), 900);
+        } else setTimeout(round, 1100);
+        hud();
+        return;
+      }
+      d.classList.add('gone');
+      if (next === 1) document.querySelectorAll('.b.n').forEach(e => e.classList.add('hidden'));
+      next++;
+      if (next > count) { live = false; count++; setTimeout(round, 300); }
+    }
+
+    function hud() { $('hud').innerHTML = `${count}<small>${'❤️'.repeat(3 - strikes)}</small>`; }
+    function start() { count = 4; strikes = 0; round(); }
+    W.overlay({ title: '🐵 Chimp Test', text: 'Tap the numbers in order.<br>After 1, they hide!<br>How many can you hold?', onStart: start });
+  </script>
+</body>
+</html>
