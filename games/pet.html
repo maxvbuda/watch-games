@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Pocket Pet</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 30px 6px max(5px, env(safe-area-inset-bottom)); gap: 4px; }
+    #stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; }
+    .st { font-size: 10px; display: flex; align-items: center; gap: 4px; }
+    .st .bar { flex: 1; height: 5px; border-radius: 3px; background: #2c2c2e; overflow: hidden; }
+    .st .bar div { height: 100%; border-radius: 3px; transition: width 0.3s; }
+    #stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; min-height: 0; }
+    #pet { font-size: 58px; line-height: 1; transition: transform 0.2s; }
+    #pet.bounce { animation: bounce 0.5s; }
+    @keyframes bounce { 30% { transform: translateY(-14px) scale(1.1); } 60% { transform: translateY(0) scale(0.95); } }
+    #pet.sleep { opacity: 0.6; }
+    #say { font-size: 11px; color: var(--muted); height: 14px; text-align: center; }
+    #fx { position: absolute; font-size: 20px; pointer-events: none; animation: rise 1s forwards; }
+    @keyframes rise { to { transform: translateY(-30px); opacity: 0; } }
+    #acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+    #acts button { border: 0; border-radius: 12px; background: #2c2c2e; font-size: 20px; padding: 6px 0; }
+    #acts button:active { background: #48484a; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="stats"></div>
+    <div id="stage"><div id="pet"></div><div id="say"></div></div>
+    <div id="acts">
+      <button data-a="feed" aria-label="Feed">🍖</button>
+      <button data-a="play" aria-label="Play">⚽️</button>
+      <button data-a="clean" aria-label="Clean">🛁</button>
+      <button data-a="sleep" aria-label="Sleep">💤</button>
+    </div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    // Needs drain in real time (even while the page is closed) and are saved on the watch.
+    const STATS = [
+      { k: 'food', n: '🍖', c: '#ff9f0a', drain: 4 },    // % per hour
+      { k: 'fun', n: '⚽️', c: '#30d158', drain: 5 },
+      { k: 'clean', n: '🛁', c: '#64d2ff', drain: 3 },
+      { k: 'energy', n: '💤', c: '#bf5af2', drain: 3.5 },
+    ];
+    const STAGES = [[0, '🥚', 'Egg'], [0.02, '🐣', 'Chick'], [1, '🐥', 'Chickling'], [3, '🐤', 'Birdie'], [7, '🦜', 'Parrot'], [14, '🦚', 'Peacock']];
+    const $ = id => document.getElementById(id);
+    let pet = load();
+
+    function load() {
+      try { const p = JSON.parse(localStorage.getItem('wg.pet')); if (p && p.born) return p; } catch (e) {}
+      return { born: Date.now(), t: Date.now(), food: 80, fun: 80, clean: 80, energy: 80, asleep: false };
+    }
+    function save() { try { localStorage.setItem('wg.pet', JSON.stringify(pet)); } catch (e) {} }
+
+    function tick() {
+      const hrs = (Date.now() - pet.t) / 3.6e6;
+      pet.t = Date.now();
+      for (const s of STATS) {
+        let d = s.drain * hrs;
+        if (pet.asleep) d = s.k === 'energy' ? -25 * hrs : d * 0.5;
+        pet[s.k] = W.clamp(pet[s.k] - d, 0, 100);
+      }
+      if (pet.asleep && pet.energy >= 100) pet.asleep = false;
+    }
+
+    const ageDays = () => (Date.now() - pet.born) / 8.64e7;
+    const stage = () => STAGES.filter(s => ageDays() >= s[0]).pop();
+    const mood = () => Math.min(...STATS.map(s => pet[s.k]));
+
+    function say(t) { $('say').textContent = t; }
+    function fx(e) {
+      const d = document.createElement('div');
+      d.id = 'fx'; d.textContent = e;
+      d.style.left = 50 + W.rand(-20, 20) + '%'; d.style.top = '30%';
+      $('stage').appendChild(d);
+      setTimeout(() => d.remove(), 1000);
+    }
+    function bounce() { const p = $('pet'); p.classList.remove('bounce'); void p.offsetWidth; p.classList.add('bounce'); }
+
+    function act(a) {
+      tick();
+      if (pet.asleep && a !== 'sleep') return say('Shh… sleeping 😴');
+      if (a === 'feed') { if (pet.food > 95) return say('Too full!'); pet.food = Math.min(100, pet.food + 25); fx('🍖'); say('Yum!'); }
+      if (a === 'play') {
+        if (pet.energy < 10) return say('Too tired to play…');
+        pet.fun = Math.min(100, pet.fun + 20); pet.energy = Math.max(0, pet.energy - 8); pet.food = Math.max(0, pet.food - 4); fx(W.pick(['⚽️', '🎾', '🪀', '✨'])); say('Wheee!');
+      }
+      if (a === 'clean') { pet.clean = 100; fx('🫧'); say('Squeaky clean!'); }
+      if (a === 'sleep') { pet.asleep = !pet.asleep; say(pet.asleep ? 'Goodnight 🌙' : 'Good morning! ☀️'); }
+      bounce();
+      save();
+      draw();
+    }
+
+    function draw() {
+      $('stats').innerHTML = STATS.map(s => `<div class="st">${s.n}<div class="bar"><div style="width:${pet[s.k]}%;background:${pet[s.k] < 25 ? '#ff453a' : s.c}"></div></div></div>`).join('');
+      const [, emoji, name] = stage();
+      const m = mood();
+      $('pet').textContent = emoji;
+      $('pet').className = pet.asleep ? 'sleep' : '';
+      const days = ageDays();
+      $('hud').innerHTML = `${name}<small>${days < 1 ? Math.floor(days * 24) + 'h old' : Math.floor(days) + 'd old'} · ${pet.asleep ? '😴' : m > 60 ? '😊' : m > 25 ? '😐' : '😢'}</small>`;
+      W.best('pet', Math.floor(days));
+    }
+
+    document.querySelectorAll('#acts button').forEach(b => b.addEventListener('click', () => act(b.dataset.a)));
+    // Tap the pet to pet it; spinning the crown tickles it.
+    $('pet').addEventListener('click', () => { if (!pet.asleep) { fx('❤️'); bounce(); pet.fun = Math.min(100, pet.fun + 2); save(); draw(); } });
+    let acc = 0;
+    W.crown(d => { acc += Math.abs(d); if (acc > 120 && !pet.asleep) { acc = 0; fx('😆'); bounce(); pet.fun = Math.min(100, pet.fun + 1); save(); draw(); } });
+
+    tick(); save(); draw();
+    const m = mood();
+    say(pet.asleep ? 'Zzz…' : m < 25 ? 'I need you! 🥺' : m < 60 ? 'Hi again!' : 'Happy to see you!');
+    setInterval(() => { tick(); save(); draw(); }, 10000);
+  </script>
+</body>
+</html>
