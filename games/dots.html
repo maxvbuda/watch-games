@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Dots & Boxes</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const B = 4;   // boxes per side
+    let gap, ox, oy;
+    const view = W.setupCanvas(canvas, (w, h) => {
+      gap = Math.min(w - 24, h - 50) / B;
+      ox = (w - gap * B) / 2;
+      oy = h - gap * B - 12;
+    });
+    const ctx = view.ctx;
+
+    // Lines: h[y][x] (y 0..B, x 0..B-1), v[y][x] (y 0..B-1, x 0..B). Value = owner (1 you, 2 watch).
+    let H, V, boxes, turn, busy, done, last, tally = { w: 0, l: 0 };
+
+    const sides = (x, y) => [H[y][x], H[y + 1][x], V[y][x], V[y][x + 1]].filter(Boolean).length;
+    const allLines = () => {
+      const out = [];
+      for (let y = 0; y <= B; y++) for (let x = 0; x < B; x++) if (!H[y][x]) out.push(['h', x, y]);
+      for (let y = 0; y < B; y++) for (let x = 0; x <= B; x++) if (!V[y][x]) out.push(['v', x, y]);
+      return out;
+    };
+    // Boxes touching a line.
+    function adj([t, x, y]) {
+      const out = [];
+      if (t === 'h') { if (y > 0) out.push([x, y - 1]); if (y < B) out.push([x, y]); }
+      else { if (x > 0) out.push([x - 1, y]); if (x < B) out.push([x, y]); }
+      return out;
+    }
+
+    // Draw a line; returns true if it completed a box (player goes again).
+    function play(line, p) {
+      const [t, x, y] = line;
+      (t === 'h' ? H : V)[y][x] = p;
+      last = line;
+      let scored = false;
+      for (const [bx, by] of adj(line)) if (!boxes[by][bx] && sides(bx, by) === 4) { boxes[by][bx] = p; scored = true; }
+      return scored;
+    }
+
+    function aiPick() {
+      const lines = allLines();
+      // 1. Complete a box. 2. Avoid giving away a box (making a 3rd side). 3. Least damage.
+      const completes = lines.find(l => adj(l).some(([x, y]) => !boxes[y][x] && sides(x, y) === 3));
+      if (completes) return completes;
+      const safe = lines.filter(l => adj(l).every(([x, y]) => sides(x, y) < 2));
+      if (safe.length) return W.pick(safe);
+      let best = null, cost = Infinity;
+      for (const l of lines) {
+        const c = adj(l).filter(([x, y]) => sides(x, y) === 2).length + Math.random() * 0.5;
+        if (c < cost) { cost = c; best = l; }
+      }
+      return best;
+    }
+
+    const scoreOf = p => boxes.flat().filter(v => v === p).length;
+    function updateHud() { hud.innerHTML = `🟢${scoreOf(1)} 🔴${scoreOf(2)}<small>${done ? '' : turn === 1 ? 'your turn' : 'watch…'}</small>`; }
+
+    function afterMove(scored) {
+      if (!allLines().length) return finish();
+      if (!scored) turn = 3 - turn;
+      updateHud();
+      if (turn === 2) {
+        busy = true;
+        setTimeout(() => { busy = false; afterMove(play(aiPick(), 2)); }, 380);
+      }
+    }
+
+    function finish() {
+      done = true;
+      const me = scoreOf(1), ai = scoreOf(2);
+      if (me > ai) { tally.w++; W.best('dots', tally.w); } else if (ai > me) tally.l++;
+      updateHud();
+      setTimeout(() => W.overlay({ title: me > ai ? 'You win! 🎉' : me < ai ? 'Watch wins 🤖' : 'Tie', big: `${me}–${ai}`, text: `Session ${tally.w}–${tally.l}`, button: 'Again', onStart: start }), 700);
+    }
+
+    function tap(p) {
+      if (done || busy || turn !== 1) return;
+      // Pick the nearest free line midpoint.
+      let best = null, bd = gap * 0.45;
+      for (const l of allLines()) {
+        const [t, x, y] = l;
+        const mx = ox + (t === 'h' ? (x + 0.5) * gap : x * gap), my = oy + (t === 'h' ? y * gap : (y + 0.5) * gap);
+        const d = Math.hypot(p.x - mx, p.y - my);
+        if (d < bd) { bd = d; best = l; }
+      }
+      if (best) afterMove(play(best, 1));
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      const col = p => (p === 1 ? '#30d158' : '#ff453a');
+      for (let y = 0; y < B; y++) for (let x = 0; x < B; x++) {
+        if (!boxes[y][x]) continue;
+        ctx.fillStyle = col(boxes[y][x]) + '55';
+        ctx.fillRect(ox + x * gap + 3, oy + y * gap + 3, gap - 6, gap - 6);
+      }
+      ctx.lineCap = 'round';
+      const line = (x1, y1, x2, y2, p, isLast) => {
+        ctx.strokeStyle = p ? col(p) : '#2c2c2e';
+        ctx.lineWidth = p ? (isLast ? 5 : 4) : 2;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      };
+      const isLast = (t, x, y) => last && last[0] === t && last[1] === x && last[2] === y;
+      for (let y = 0; y <= B; y++) for (let x = 0; x < B; x++) line(ox + x * gap, oy + y * gap, ox + (x + 1) * gap, oy + y * gap, H[y][x], isLast('h', x, y));
+      for (let y = 0; y < B; y++) for (let x = 0; x <= B; x++) line(ox + x * gap, oy + y * gap, ox + x * gap, oy + (y + 1) * gap, V[y][x], isLast('v', x, y));
+      ctx.fillStyle = '#fff';
+      for (let y = 0; y <= B; y++) for (let x = 0; x <= B; x++) { ctx.beginPath(); ctx.arc(ox + x * gap, oy + y * gap, 3, 0, Math.PI * 2); ctx.fill(); }
+    }
+
+    W.pointer(canvas, { down: tap });
+    function start() {
+      H = Array.from({ length: B + 1 }, () => new Array(B).fill(0));
+      V = Array.from({ length: B }, () => new Array(B + 1).fill(0));
+      boxes = Array.from({ length: B }, () => new Array(B).fill(0));
+      turn = 1; busy = false; done = false; last = null;
+      updateHud();
+    }
+    start();
+    W.overlay({ title: '🔲 Dots & Boxes', text: 'Tap between dots to draw.<br>Close a box = go again!', button: 'Play', onStart() {} });
+    W.loop(render);
+  </script>
+</body>
+</html>
