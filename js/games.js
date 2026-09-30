@@ -77,6 +77,7 @@ window.GAMES = [
   { id: 'five', name: 'Five', emoji: '🟩', color: '#30d158', desc: 'Guess the 5-letter word' },
   { id: 'pipes', name: 'Pipes', emoji: '🚰', color: '#64d2ff', desc: 'Rotate tiles to connect the water' },
   { id: 'penalty', name: 'Penalty Kick', emoji: '⚽️', color: '#2e8b3a', desc: 'Swipe to beat the keeper' },
+  { id: 'homerun', name: 'Home Run Derby', emoji: '⚾️', color: '#2e7d32', desc: 'Time your swing for homers' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
@@ -86,7 +87,7 @@ window.CATEGORIES = {
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire'],
-  Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty'],
+  Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty', 'homerun'],
   Fun: ['eightball', 'slots', 'cookie', 'plinko', 'pet'],
 };
 window.CROWN = ['buggy', 'safe', 'artillery', 'lander', 'pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];
