@@ -31,7 +31,7 @@ window.GAMES = [
   { id: 'hilo', name: 'Higher or Lower', emoji: '🎴', color: '#bf5af2', desc: 'Guess the next card' },
   { id: 'balloons', name: 'Balloon Pop', emoji: '🎈', color: '#ff375f', desc: 'Pop them before they escape' },
   { id: 'numbers', name: 'Number Rush', emoji: '🔢', color: '#64d2ff', desc: 'Tap 1–16 in order', unit: 's' },
-  { id: 'stop', name: 'Perfect Stop', emoji: '🎯', color: '#30d158', desc: 'Stop the needle in the zone' },
+  { id: 'stop', name: 'Perfect Stop', emoji: '⏱️', color: '#30d158', desc: 'Stop the needle in the zone' },
   { id: 'cave', name: 'Cave Flyer', emoji: '🦇', color: '#248a3d', desc: 'Hold to rise through the cave' },
   { id: 'hop', name: 'Hop', emoji: '🐔', color: '#48a848', desc: 'Cross roads and rivers' },
   { id: 'maze', name: 'Maze', emoji: '🌀', color: '#0a84ff', desc: 'Roll to the exit' },
@@ -51,4 +51,5 @@ window.GAMES = [
   { id: 'chimp', name: 'Chimp Test', emoji: '🐵', color: '#ac8e68', desc: 'Remember hidden numbers' },
   { id: 'scramble', name: 'Word Scramble', emoji: '🔤', color: '#ffd60a', desc: 'Unscramble against the clock' },
   { id: 'darts', name: 'Darts', emoji: '🎯', color: '#e0302a', desc: 'Time your throws' },
+  { id: 'bowling', name: 'Bowling', emoji: '🎳', color: '#d9a066', desc: 'Swipe to bowl, curve to hook' },
 ];

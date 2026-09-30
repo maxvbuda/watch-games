@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Bowling</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const FRAMES = 5;
+
+    let pins, ball, frame, roll, rolls, state = 'ready', msg = '', msgT = 0, settleT = 0;
+    const LANE = () => ({ x: view.w * 0.18, w: view.w * 0.64, top: 34, bot: view.h - 6 });
+    const PR = () => LANE().w * 0.045, BR = () => LANE().w * 0.075;
+
+    function rackPins() {
+      const L = LANE(), s = L.w * 0.16, cx = L.x + L.w / 2, y0 = L.top + 14;
+      pins = [];
+      for (let row = 0; row < 4; row++) for (let i = 0; i <= row; i++) {
+        pins.push({ x: cx + (i - row / 2) * s, y: y0 + (3 - row) * s * 0.85, vx: 0, vy: 0, down: false });
+      }
+    }
+
+    function resetBall() {
+      const L = LANE();
+      ball = { x: L.x + L.w / 2, y: L.bot - BR() - 6, vx: 0, vy: 0, spin: 0, rolling: false };
+    }
+
+    function standing() { return pins.filter(p => !p.down).length; }
+
+    // Swipe up to bowl: direction sets aim, sideways drift at the end adds hook.
+    let path = [];
+    function bowl() {
+      if (state !== 'play' || ball.rolling || path.length < 2) return;
+      const a = path[0], b = path[path.length - 1];
+      const dy = b.y - a.y;
+      if (dy > -20) return;
+      const sp = Math.min(-dy / 0.25, view.h * 2.2) + view.h * 0.6;
+      const ang = Math.atan2(b.x - a.x, -dy);
+      ball.x = W.clamp(a.x, LANE().x + BR(), LANE().x + LANE().w - BR());
+      ball.vx = Math.sin(ang) * sp * 0.5;
+      ball.vy = -Math.cos(ang) * sp;
+      // Hook: how much the swipe bent near the end.
+      const mid = path[Math.floor(path.length / 2)];
+      ball.spin = W.clamp(((b.x - mid.x) - (mid.x - a.x)) * 3, -view.w * 0.8, view.w * 0.8);
+      ball.rolling = true;
+    }
+
+    function update(dt) {
+      const L = LANE(), pr = PR(), br = BR();
+      if (ball.rolling) {
+        ball.vx += ball.spin * dt;
+        ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+        if (ball.x < L.x + br || ball.x > L.x + L.w - br) { ball.vx = 0; ball.spin = 0; ball.gutter = true; ball.x = W.clamp(ball.x, L.x + br * 0.5, L.x + L.w - br * 0.5); }
+      }
+      for (const p of pins) {
+        if (!ball.gutter && ball.rolling) {
+          const dx = p.x - ball.x, dy = p.y - ball.y, d = Math.hypot(dx, dy);
+          if (d < pr + br && d > 0) {
+            const sp = Math.hypot(ball.vx, ball.vy);
+            p.vx = dx / d * sp * 0.9 + ball.vx * 0.3; p.vy = dy / d * sp * 0.9 + ball.vy * 0.2;
+            p.down = true;
+            ball.vx -= dx / d * sp * 0.1;
+          }
+        }
+        if (p.vx || p.vy) {
+          p.x += p.vx * dt; p.y += p.vy * dt;
+          p.vx *= Math.pow(0.1, dt); p.vy *= Math.pow(0.1, dt);
+          for (const q of pins) {
+            if (q === p || q.down) continue;
+            const dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy);
+            const sp = Math.hypot(p.vx, p.vy);
+            if (d < pr * 2.2 && sp > 40) { q.down = true; q.vx = dx / d * sp * 0.75; q.vy = dy / d * sp * 0.75; }
+          }
+          if (Math.hypot(p.vx, p.vy) < 5) { p.vx = 0; p.vy = 0; }
+        }
+      }
+      if (ball.rolling && ball.y < L.top - br * 2) { ball.rolling = false; settleT = 0.7; }
+      if (settleT > 0) {
+        settleT -= dt;
+        if (settleT <= 0) endRoll();
+      }
+    }
+
+    function endRoll() {
+      const downNow = pins.filter(p => p.down && !p.counted);
+      downNow.forEach(p => (p.counted = true));
+      rolls[frame].push(downNow.length);
+      const f = rolls[frame];
+      const strike = roll === 0 && f[0] === 10;
+      const spare = roll === 1 && f[0] + f[1] === 10;
+      msg = strike ? 'STRIKE! ❌' : spare ? 'Spare! ⁄' : downNow.length === 0 ? (ball.gutter ? 'Gutter…' : 'Miss') : `${downNow.length} pins`;
+      msgT = 1.2;
+      if (strike || roll === 1) {
+        frame++; roll = 0;
+        if (frame >= FRAMES) return finish();
+        rackPins();
+      } else {
+        roll = 1;
+        pins = pins.filter(p => !p.down);   // sweep fallen pins
+      }
+      resetBall();
+      updateHud();
+    }
+
+    // Simplified scoring: strike = 10 + next two rolls, spare = 10 + next roll.
+    function total() {
+      const flat = rolls.flat();
+      let s = 0, i = 0;
+      for (let f = 0; f < rolls.length && rolls[f].length; f++) {
+        const r = rolls[f];
+        if (r[0] === 10) s += 10 + (flat[i + 1] || 0) + (flat[i + 2] || 0);
+        else if (r.length === 2 && r[0] + r[1] === 10) s += 10 + (flat[i + 2] || 0);
+        else s += r.reduce((a, b) => a + b, 0);
+        i += r.length;
+      }
+      return s;
+    }
+
+    function updateHud() { hud.innerHTML = `${total()}<small>frame ${Math.min(frame + 1, FRAMES)}/${FRAMES}</small>`; }
+
+    function finish() {
+      state = 'over';
+      updateHud();
+      const s = total();
+      const best = W.best('bowling', s);
+      setTimeout(() => W.overlay({ title: 'Game over 🎳', big: s, text: `${FRAMES} frames · best ${best}`, button: 'Again', onStart: start }), 900);
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const L = LANE();
+      ctx.fillStyle = '#1c1c1e';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#d9a066';
+      ctx.fillRect(L.x, L.top, L.w, L.bot - L.top);
+      ctx.fillStyle = '#c48a50';
+      for (let i = 1; i < 8; i++) ctx.fillRect(L.x + (L.w * i) / 8, L.top, 1, L.bot - L.top);
+      ctx.fillStyle = '#0006';
+      ctx.fillRect(L.x - 8, L.top, 8, L.bot - L.top);
+      ctx.fillRect(L.x + L.w, L.top, 8, L.bot - L.top);
+      ctx.fillStyle = '#8b5a2b';
+      for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(L.x + L.w * (0.3 + i * 0.1), h * 0.62); ctx.lineTo(L.x + L.w * (0.28 + i * 0.1), h * 0.62 + 6); ctx.lineTo(L.x + L.w * (0.32 + i * 0.1), h * 0.62 + 6); ctx.fill(); }
+
+      const pr = PR();
+      for (const p of pins) {
+        ctx.globalAlpha = p.down ? 0.35 : 1;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(p.x, p.y, pr, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ff453a';
+        ctx.beginPath(); ctx.arc(p.x, p.y, pr * 0.45, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#0a84ff';
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, BR(), 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#003a80';
+      for (const [ox, oy] of [[-0.3, -0.3], [0.2, -0.35], [0, 0.1]]) { ctx.beginPath(); ctx.arc(ball.x + ox * BR(), ball.y + oy * BR(), BR() * 0.13, 0, Math.PI * 2); ctx.fill(); }
+
+      if (path.length > 1 && !ball.rolling) {
+        ctx.strokeStyle = '#ffffff88'; ctx.lineWidth = 2;
+        ctx.beginPath(); path.forEach((p, i) => ctx[i ? 'lineTo' : 'moveTo'](p.x, p.y)); ctx.stroke();
+      }
+      if (msgT > 0) {
+        msgT -= dt;
+        ctx.globalAlpha = Math.min(1, msgT * 3);
+        ctx.fillStyle = '#fff';
+        ctx.font = '800 16px -apple-system, system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(msg, w / 2, h * 0.5);
+        ctx.globalAlpha = 1;
+      } else if (state === 'play' && !ball.rolling && frame === 0 && roll === 0) {
+        ctx.fillStyle = '#fff';
+        ctx.font = '600 11px -apple-system, system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('Swipe up to bowl', w / 2, h * 0.5);
+      }
+    }
+
+    W.pointer(canvas, {
+      down(p) { path = [p]; },
+      move(p) { if (path.length) path.push(p); },
+      up(p) { path.push(p); bowl(); path = []; },
+    });
+
+    function start() { frame = 0; roll = 0; rolls = Array.from({ length: FRAMES }, () => []); rackPins(); resetBall(); updateHud(); state = 'play'; }
+    frame = 0; roll = 0; rolls = Array.from({ length: FRAMES }, () => []); rackPins(); resetBall();
+    W.overlay({ title: '🎳 Bowling', text: 'Swipe up to roll.<br>Curve your swipe to hook!<br>5 frames.', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
