@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Snake</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const COLS = 14, TOP = 32;
+    let cell, rows, ox;
+    const view = W.setupCanvas(canvas, layout);
+    const ctx = view.ctx;
+
+    function layout(w, h) {
+      cell = Math.floor(w / COLS);
+      rows = Math.floor((h - TOP - 4) / cell);
+      ox = Math.floor((w - cell * COLS) / 2);
+    }
+    layout(view.w, view.h);
+
+    const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+    let snake, dir, queue, apple, score, state = 'ready', tickT, interval;
+
+    function placeApple() {
+      const free = [];
+      for (let x = 0; x < COLS; x++) for (let y = 0; y < rows; y++) {
+        if (!snake.some(s => s.x === x && s.y === y)) free.push({ x, y });
+      }
+      apple = W.pick(free);
+    }
+
+    function reset() {
+      const cy = Math.floor(rows / 2);
+      snake = [{ x: 5, y: cy }, { x: 4, y: cy }, { x: 3, y: cy }];
+      dir = 'right';
+      queue = [];
+      score = 0;
+      interval = 0.2;
+      tickT = 0;
+      placeApple();
+      hud.textContent = '0';
+    }
+
+    function turn(d) {
+      // Queue up to two turns so quick swipes aren't lost; reject reversals.
+      const last = queue.length ? queue[queue.length - 1] : dir;
+      const [lx, ly] = DIRS[last], [nx, ny] = DIRS[d];
+      if (lx + nx === 0 && ly + ny === 0) return;
+      if (d === last || queue.length >= 2) return;
+      queue.push(d);
+    }
+
+    function tick() {
+      if (queue.length) dir = queue.shift();
+      const [dx, dy] = DIRS[dir];
+      const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+      const hitsSelf = snake.slice(0, -1).some(s => s.x === head.x && s.y === head.y);
+      if (head.x < 0 || head.y < 0 || head.x >= COLS || head.y >= rows || hitsSelf) return die();
+      snake.unshift(head);
+      if (head.x === apple.x && head.y === apple.y) {
+        score++;
+        hud.textContent = score;
+        interval = Math.max(0.075, interval * 0.965);
+        placeApple();
+      } else snake.pop();
+    }
+
+    function die() {
+      state = 'over';
+      const best = W.best('snake', score);
+      setTimeout(() => W.overlay({ title: 'Game over', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 500);
+    }
+
+    function render() {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, view.w, view.h);
+      ctx.fillStyle = '#0f1a0f';
+      ctx.fillRect(ox, TOP, COLS * cell, rows * cell);
+      for (let x = 0; x < COLS; x++) for (let y = 0; y < rows; y++) {
+        if ((x + y) % 2) { ctx.fillStyle = '#122012'; ctx.fillRect(ox + x * cell, TOP + y * cell, cell, cell); }
+      }
+      ctx.font = `${cell}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🍎', ox + (apple.x + 0.5) * cell, TOP + (apple.y + 0.55) * cell);
+      snake.forEach((s, i) => {
+        const t = i / snake.length;
+        ctx.fillStyle = state === 'over' ? '#636366' : `hsl(${135 - t * 30}, 70%, ${55 - t * 20}%)`;
+        const pad = i === 0 ? 0.5 : 1;
+        ctx.fillRect(ox + s.x * cell + pad, TOP + s.y * cell + pad, cell - pad * 2, cell - pad * 2);
+      });
+      const h = snake[0], [dx, dy] = DIRS[dir];
+      ctx.fillStyle = '#000';
+      for (const side of [-1, 1]) {
+        const ex = ox + (h.x + 0.5 + dx * 0.2 - dy * side * 0.22) * cell;
+        const ey = TOP + (h.y + 0.5 + dy * 0.2 + dx * side * 0.22) * cell;
+        ctx.beginPath(); ctx.arc(ex, ey, cell * 0.1, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    W.swipe(canvas, d => { if (state === 'play') turn(d); });
+
+    function start() {
+      reset();
+      state = 'play';
+    }
+
+    reset();
+    W.overlay({ title: '🍎 Snake', text: 'Swipe to turn.<br>Eat apples, don\'t bite yourself.', onStart: start });
+
+    W.loop(dt => {
+      if (state === 'play') {
+        tickT += dt;
+        while (tickT >= interval && state === 'play') { tickT -= interval; tick(); }
+      }
+      render();
+    });
+  </script>
+</body>
+</html>
