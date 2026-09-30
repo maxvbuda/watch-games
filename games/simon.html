@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Simon</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 16px; }
+    #pad {
+      --size: min(94vw, calc(100vh - 24px));
+      position: relative;
+      width: var(--size);
+      height: var(--size);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 5px;
+    }
+    .q { opacity: 0.35; transition: opacity 0.08s, filter 0.08s; }
+    .q.lit { opacity: 1; filter: brightness(1.35); }
+    .q:nth-child(1) { background: #30d158; border-radius: 100% 8px 8px 8px; }
+    .q:nth-child(2) { background: #ff453a; border-radius: 8px 100% 8px 8px; }
+    .q:nth-child(3) { background: #ffd60a; border-radius: 8px 8px 8px 100%; }
+    .q:nth-child(4) { background: #0a84ff; border-radius: 8px 8px 100% 8px; }
+    #center {
+      position: absolute;
+      left: 50%; top: 50%;
+      width: 34%; height: 34%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: calc(var(--size) / 7);
+      pointer-events: none;
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="pad">
+      <div class="q"></div><div class="q"></div><div class="q"></div><div class="q"></div>
+      <div id="center">0</div>
+    </div>
+  </div>
+  <script src="../js/common.js"></script>
+  <script>
+    const qs = [...document.querySelectorAll('.q')];
+    const center = document.getElementById('center');
+    const TONES = [329.6, 261.6, 220, 164.8];
+    let seq = [], pos = 0, accepting = false, audio;
+
+    function beep(i, ms) {
+      try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.frequency.value = i < 0 ? 90 : TONES[i];
+        o.type = i < 0 ? 'sawtooth' : 'sine';
+        g.gain.setValueAtTime(0.25, audio.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + ms / 1000);
+        o.connect(g).connect(audio.destination);
+        o.start();
+        o.stop(audio.currentTime + ms / 1000);
+      } catch (e) {}
+    }
+
+    function flash(i, ms) {
+      qs[i].classList.add('lit');
+      beep(i, ms);
+      setTimeout(() => qs[i].classList.remove('lit'), ms);
+    }
+
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+
+    async function playSeq() {
+      accepting = false;
+      await wait(600);
+      const speed = Math.max(220, 520 - seq.length * 22);
+      for (const i of seq) {
+        flash(i, speed);
+        await wait(speed + 110);
+      }
+      pos = 0;
+      accepting = true;
+    }
+
+    function nextRound() {
+      seq.push(W.randInt(0, 3));
+      center.textContent = seq.length - 1;
+      playSeq();
+    }
+
+    function press(i) {
+      if (!accepting) return;
+      flash(i, 200);
+      if (seq[pos] !== i) {
+        accepting = false;
+        beep(-1, 500);
+        const score = seq.length - 1;
+        const best = W.best('simon', score);
+        setTimeout(() => W.overlay({ title: 'Wrong!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 600);
+        return;
+      }
+      pos++;
+      if (pos === seq.length) {
+        accepting = false;
+        center.textContent = seq.length;
+        setTimeout(nextRound, 300);
+      }
+    }
+
+    qs.forEach((q, i) => {
+      q.addEventListener('touchstart', e => { e.preventDefault(); press(i); }, { passive: false });
+      q.addEventListener('mousedown', () => press(i));
+    });
+
+    function start() {
+      seq = [];
+      nextRound();
+    }
+
+    W.overlay({ title: '🔴 Simon', text: 'Watch the pattern,<br>then repeat it.', onStart: start });
+  </script>
+</body>
+</html>
