@@ -29,7 +29,7 @@
       spawnT = 0.6; coinT = 1.5;
       updateHud();
     }
-    const scoreNow = () => Math.floor(dist / 20) + bonus;
+    const scoreNow = () => Math.floor(dist / 3) + bonus;
     function updateHud() { hud.textContent = scoreNow(); }
 
     const laneX = i => RX() + (i + 0.5) * LW();
