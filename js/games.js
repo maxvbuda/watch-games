@@ -26,4 +26,5 @@ window.GAMES = [
   { id: 'connect4', name: 'Connect Four', emoji: '🔴', color: '#ffd60a', desc: 'Four in a row vs the watch' },
   { id: 'lightsout', name: 'Lights Out', emoji: '💡', color: '#ffd60a', desc: 'Switch every light off' },
   { id: 'fifteen', name: '15 Puzzle', emoji: '🧩', color: '#ff9f0a', desc: 'Slide tiles into order', unit: ' moves' },
+  { id: 'orbit', name: 'Orbit', emoji: '🪐', color: '#5e5ce6', desc: 'Tap to reverse, grab gems' },
 ];

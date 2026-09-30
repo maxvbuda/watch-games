@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Orbit</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const TAU = Math.PI * 2;
+
+    let ang, dir, speed, gem, spikes, score, state = 'ready', pulse = 0, t = 0;
+    const OR = () => Math.min(view.w, view.h) * 0.36;
+
+    const angDist = (a, b) => { const d = Math.abs(((a - b) % TAU + TAU) % TAU); return Math.min(d, TAU - d); };
+
+    function freeAngle(minGap) {
+      for (let i = 0; i < 50; i++) {
+        const a = Math.random() * TAU;
+        if (angDist(a, ang) > minGap && spikes.every(s => angDist(a, s.a) > 0.5) && (!gem || angDist(a, gem) > 0.5)) return a;
+      }
+      return ang + Math.PI;
+    }
+
+    function reset() {
+      ang = -Math.PI / 2; dir = 1; speed = 2.2; score = 0;
+      spikes = [];
+      gem = null;
+      gem = freeAngle(1.2);
+      hud.textContent = '0';
+    }
+
+    function flip() { if (state === 'play') { dir *= -1; pulse = 0.15; } }
+
+    function update(dt) {
+      ang += dir * speed * dt;
+      for (const s of spikes) s.a += s.v * dt;   // later spikes drift
+      if (angDist(ang, gem) < 0.18) {
+        score++;
+        hud.textContent = score;
+        speed = Math.min(4.2, speed + 0.06);
+        if (spikes.length < 7) spikes.push({ a: freeAngle(1.4), v: score > 8 && Math.random() < 0.4 ? W.rand(-0.5, 0.5) : 0 });
+        gem = freeAngle(1.0);
+      }
+      if (spikes.some(s => angDist(ang, s.a) < 0.14)) {
+        state = 'over';
+        const best = W.best('orbit', score);
+        setTimeout(() => W.overlay({ title: 'Spiked!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 500);
+      }
+    }
+
+    function render(dt) {
+      t += dt;
+      const { w, h } = view;
+      const cx = w / 2, cy = h / 2 + 8, r = OR();
+      ctx.fillStyle = '#0b1020';
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#2c3350';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
+
+      ctx.fillStyle = '#ffffff22';
+      ctx.font = `800 ${Math.round(r * 0.7)}px -apple-system, system-ui`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(score, cx, cy);
+
+      const gx = cx + Math.cos(gem) * r, gy = cy + Math.sin(gem) * r;
+      ctx.fillStyle = '#30d158';
+      ctx.beginPath(); ctx.arc(gx, gy, 5 + Math.sin(t * 6) * 1.2, 0, TAU); ctx.fill();
+
+      ctx.fillStyle = '#ff453a';
+      for (const s of spikes) {
+        ctx.save();
+        ctx.translate(cx + Math.cos(s.a) * r, cy + Math.sin(s.a) * r);
+        ctx.rotate(s.a);
+        ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(5, -6); ctx.lineTo(5, 6); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+
+      if (state !== 'over') {
+        pulse = Math.max(0, pulse - dt);
+        const px = cx + Math.cos(ang) * r, py = cy + Math.sin(ang) * r;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(px, py, 6 + pulse * 20, 0, TAU); ctx.fill();
+      }
+    }
+
+    W.pointer(canvas, { down: flip });
+    window.addEventListener('keydown', e => { if (e.key === ' ') flip(); });
+
+    function start() { reset(); state = 'play'; }
+
+    reset();
+    W.overlay({ title: '🪐 Orbit', text: 'Tap to reverse direction.<br>Grab 🟢, dodge 🔺.', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
