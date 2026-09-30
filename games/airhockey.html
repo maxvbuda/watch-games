@@ -55,7 +55,10 @@
       // CPU: defend its goal, strike when the puck is on its side.
       const speed = view.w * (1.6 + score.me * 0.15);
       let tx, ty;
-      if (puck.y < mid) { tx = puck.x; ty = puck.y - r * 0.6; }
+      if (puck.y < cpu.y + r * 0.3 && puck.y < mid) {
+        // Puck got behind the CPU: swing around it instead of pinning it to the wall.
+        tx = puck.x + (puck.x < view.w / 2 ? r * 2.6 : -r * 2.6); ty = puck.y + r * 1.5;
+      } else if (puck.y < mid) { tx = puck.x; ty = puck.y - r * 0.6; }
       else { tx = view.w / 2 + (puck.x - view.w / 2) * 0.5; ty = TOP + view.h * 0.1; }
       const dx = tx - cpu.x, dy = ty - cpu.y, d = Math.hypot(dx, dy) || 1, step = Math.min(d, speed * dt);
       cpu.vx = dx / d * step / dt; cpu.vy = dy / d * step / dt;
@@ -73,6 +76,14 @@
         if (puck.y < TOP + PAD + pr && !inGoal) { puck.y = TOP + PAD + pr; puck.vy = Math.abs(puck.vy); }
         if (puck.y > view.h - PAD - pr && !inGoal) { puck.y = view.h - PAD - pr; puck.vy = -Math.abs(puck.vy); }
         hitMallet(me); hitMallet(cpu);
+        // A mallet must never shove the puck through a wall: keep the puck in,
+        // and if that leaves it overlapping a mallet, push the mallet back instead.
+        puck.x = W.clamp(puck.x, PAD + pr, view.w - PAD - pr);
+        if (Math.abs(puck.x - view.w / 2) >= GOAL() / 2) puck.y = W.clamp(puck.y, TOP + PAD + pr, view.h - PAD - pr);
+        for (const m of [me, cpu]) {
+          const dx = m.x - puck.x, dy = m.y - puck.y, d = Math.hypot(dx, dy) || 1, min = MR() + pr;
+          if (d < min) { m.x = puck.x + dx / d * min; m.y = puck.y + dy / d * min; }
+        }
       }
       puck.vx *= Math.pow(0.8, dt); puck.vy *= Math.pow(0.8, dt);
       if (puck.y < TOP - PR()) goal('me');
