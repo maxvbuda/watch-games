@@ -13,4 +13,5 @@ window.GAMES = [
   { id: 'mines', name: 'Minesweeper', emoji: '💣', color: '#8e8e93', desc: 'Clear the field fast', unit: 's' },
   { id: 'memory', name: 'Memory Match', emoji: '🃏', color: '#bf5af2', desc: 'Find all 8 pairs', unit: ' moves' },
   { id: 'reaction', name: 'Reaction', emoji: '⚡', color: '#ffd60a', desc: 'How fast are you?', unit: ' ms' },
+  { id: 'dodge', name: 'Asteroid Dodge', emoji: '☄️', color: '#ff9f0a', desc: 'Fly, dodge, grab stars' },
 ];
