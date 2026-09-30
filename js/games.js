@@ -65,4 +65,5 @@ window.GAMES = [
   { id: 'flood', name: 'Flood It', emoji: '🌊', color: '#0a84ff', desc: 'Fill the board in 22 moves', unit: ' moves' },
   { id: 'codebreaker', name: 'Code Breaker', emoji: '🔐', color: '#5e5ce6', desc: 'Crack the colour code', unit: ' tries' },
   { id: 'catch', name: 'Catch', emoji: '🧺', color: '#457b9d', desc: 'Crown moves the basket' },
+  { id: 'cookie', name: 'Cookie Clicker', emoji: '🍪', color: '#c48a50', desc: 'Tap or spin the Crown to bake' },
 ];

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Cookie Clicker</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; padding: 28px 4px max(4px, env(safe-area-inset-bottom)); gap: 3px; }
+    #count { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    #rate { font-size: 10px; color: var(--muted); }
+    #cookie { font-size: 64px; line-height: 1; user-select: none; transition: transform 0.06s; cursor: pointer; margin: 2px 0; }
+    #cookie.press { transform: scale(0.88); }
+    #shop { width: 100%; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; flex: 1; min-height: 0; }
+    .item { display: flex; align-items: center; gap: 6px; background: #1c1c1e; border: 0; border-radius: 10px; padding: 4px 8px; color: #fff; font: inherit; text-align: left; }
+    .item:disabled { opacity: 0.35; }
+    .item .e { font-size: 18px; }
+    .item .n { font-size: 12px; font-weight: 700; flex: 1; }
+    .item .c { font-size: 11px; color: #ffd60a; }
+    .item .o { font-size: 11px; color: var(--muted); min-width: 16px; text-align: right; }
+    .pop { position: fixed; pointer-events: none; font-weight: 800; color: #ffd60a; font-size: 13px; animation: up 0.7s forwards; }
+    @keyframes up { to { transform: translateY(-30px); opacity: 0; } }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="count">0</div>
+    <div id="rate">0 per second</div>
+    <div id="cookie">🍪</div>
+    <div id="shop"></div>
+  </div>
+  <script src="../js/common.js"></script>
+  <script>
+    // An idle clicker: tap (or spin the Crown) for cookies, buy helpers that bake for you. Progress is saved.
+    const SHOP = [
+      { id: 'cursor', e: '👆', n: 'Auto-tap', base: 15, cps: 0.2 },
+      { id: 'grandma', e: '👵', n: 'Grandma', base: 100, cps: 1 },
+      { id: 'farm', e: '🌾', n: 'Farm', base: 600, cps: 5 },
+      { id: 'factory', e: '🏭', n: 'Factory', base: 4000, cps: 25 },
+      { id: 'rocket', e: '🚀', n: 'Cookie Rocket', base: 30000, cps: 150 },
+      { id: 'portal', e: '🌀', n: 'Cookie Portal', base: 250000, cps: 1000 },
+    ];
+    const $ = id => document.getElementById(id);
+    let s = load();
+
+    function load() {
+      try { const v = JSON.parse(localStorage.getItem('wg.cookie')); if (v && typeof v.cookies === 'number') return v; } catch (e) {}
+      return { cookies: 0, total: 0, owned: {}, t: Date.now() };
+    }
+    function save() { s.t = Date.now(); try { localStorage.setItem('wg.cookie', JSON.stringify(s)); } catch (e) {} }
+
+    const cost = it => Math.ceil(it.base * Math.pow(1.15, s.owned[it.id] || 0));
+    const cps = () => SHOP.reduce((a, it) => a + it.cps * (s.owned[it.id] || 0), 0);
+    const perTap = () => 1 + Math.floor(cps() * 0.05);
+    const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e4 ? (n / 1e3).toFixed(1) + 'k' : Math.floor(n).toLocaleString();
+
+    function add(n) { s.cookies += n; s.total += n; }
+
+    function buildShop() {
+      $('shop').innerHTML = '';
+      SHOP.forEach(it => {
+        const b = document.createElement('button');
+        b.className = 'item';
+        b.dataset.id = it.id;
+        b.innerHTML = `<span class="e">${it.e}</span><span class="n">${it.n}<br><span class="c"></span></span><span class="o"></span>`;
+        b.addEventListener('click', () => {
+          const c = cost(it);
+          if (s.cookies < c) return;
+          s.cookies -= c;
+          s.owned[it.id] = (s.owned[it.id] || 0) + 1;
+          save();
+          draw();
+        });
+        $('shop').appendChild(b);
+      });
+    }
+
+    function draw() {
+      $('count').textContent = fmt(s.cookies) + ' 🍪';
+      const r = cps();
+      $('rate').textContent = `${r < 10 ? r.toFixed(1) : fmt(r)} per second · ${perTap()} per tap`;
+      [...$('shop').children].forEach((b, i) => {
+        const it = SHOP[i];
+        b.disabled = s.cookies < cost(it);
+        b.querySelector('.c').textContent = `🍪 ${fmt(cost(it))} · +${it.cps}/s`;
+        b.querySelector('.o').textContent = s.owned[it.id] || '';
+        // Hide items until you're close to affording them.
+        b.style.display = i === 0 || s.total >= it.base * 0.5 || s.owned[it.id] ? '' : 'none';
+      });
+    }
+
+    function tap(x, y) {
+      const n = perTap();
+      add(n);
+      const c = $('cookie');
+      c.classList.add('press');
+      setTimeout(() => c.classList.remove('press'), 60);
+      const p = document.createElement('div');
+      p.className = 'pop';
+      p.textContent = '+' + n;
+      const r = c.getBoundingClientRect();
+      p.style.left = (x ?? r.left + r.width / 2) - 8 + 'px';
+      p.style.top = (y ?? r.top) - 10 + 'px';
+      document.body.appendChild(p);
+      setTimeout(() => p.remove(), 700);
+      draw();
+    }
+
+    $('cookie').addEventListener('touchstart', e => { e.preventDefault(); tap(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+    $('cookie').addEventListener('mousedown', e => tap(e.clientX, e.clientY));
+    // Spinning the crown bakes too.
+    let acc = 0;
+    W.crown(d => { acc += Math.abs(d); while (acc > 30) { acc -= 30; tap(); } });
+
+    // Offline earnings (capped at 2 hours).
+    const away = Math.min((Date.now() - s.t) / 1000, 7200);
+    if (away > 5 && cps() > 0) add(away * cps());
+
+    buildShop();
+    draw();
+    // Redraw ~5×/sec rather than every frame to go easy on the watch battery.
+    let saveT = 0, drawT = 0;
+    W.loop(dt => {
+      add(cps() * dt);
+      saveT += dt;
+      drawT += dt;
+      if (saveT > 3) { saveT = 0; save(); W.best('cookie', Math.floor(s.total)); }
+      if (drawT > 0.2) { drawT = 0; draw(); }
+    });
+    window.addEventListener('pagehide', save);
+  </script>
+</body>
+</html>
