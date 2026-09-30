@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Pong</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const TO_WIN = 7;
+
+    let me, cpu, ball, score, state = 'ready', serveT, streak = 0;
+    const PW = () => view.w * 0.28;
+    const PH = () => Math.max(5, view.h * 0.025);
+    const BR = () => Math.max(4, view.w * 0.025);
+
+    function reset() {
+      me = { x: view.w / 2 };
+      cpu = { x: view.w / 2 };
+      score = { me: 0, cpu: 0 };
+      serve(1);
+    }
+
+    function serve(dir) {
+      ball = { x: view.w / 2, y: view.h / 2, vx: 0, vy: 0 };
+      serveT = 0.8;
+      ball.dir = dir;
+    }
+
+    function launch() {
+      const sp = view.h * 0.7;
+      const a = W.rand(-0.5, 0.5);
+      ball.vx = Math.sin(a) * sp;
+      ball.vy = Math.cos(a) * sp * ball.dir;
+    }
+
+    function paddleHit(p, y, down) {
+      const pw = PW(), r = BR();
+      if (Math.abs(ball.x - p.x) > pw / 2 + r) return false;
+      if (down ? (ball.y + r < y || ball.y - r > y + PH()) : (ball.y - r > y + PH() || ball.y + r < y)) return false;
+      // Angle depends on where the ball hits the paddle.
+      const off = (ball.x - p.x) / (pw / 2);
+      const sp = Math.min(Math.hypot(ball.vx, ball.vy) * 1.06, view.h * 1.8);
+      const a = off * 1.0;
+      ball.vx = Math.sin(a) * sp;
+      ball.vy = Math.cos(a) * sp * (down ? -1 : 1);
+      ball.y = down ? y - r : y + PH() + r;
+      return true;
+    }
+
+    function update(dt) {
+      // CPU tracks the ball with limited speed and a little lag.
+      const cpuSpeed = view.w * (1.1 + score.me * 0.08);
+      const target = ball.vy < 0 ? ball.x : view.w / 2;
+      cpu.x += W.clamp(target - cpu.x, -cpuSpeed * dt, cpuSpeed * dt);
+
+      if (serveT > 0) {
+        serveT -= dt;
+        if (serveT <= 0) launch();
+        return;
+      }
+      ball.x += ball.vx * dt;
+      ball.y += ball.vy * dt;
+      const r = BR();
+      if (ball.x < r) { ball.x = r; ball.vx = Math.abs(ball.vx); }
+      if (ball.x > view.w - r) { ball.x = view.w - r; ball.vx = -Math.abs(ball.vx); }
+
+      const myY = view.h - PH() - 8, cpuY = 34;
+      if (ball.vy > 0) paddleHit(me, myY, true);
+      else paddleHit(cpu, cpuY, false);
+
+      if (ball.y > view.h + r) point('cpu');
+      if (ball.y < -r) point('me');
+    }
+
+    function point(who) {
+      score[who]++;
+      if (score.me >= TO_WIN || score.cpu >= TO_WIN) {
+        state = 'over';
+        const won = score.me > score.cpu;
+        streak = won ? streak + 1 : 0;
+        const best = W.best('pong', streak);
+        W.overlay({
+          title: won ? 'You win! 🏓' : 'Watch wins',
+          big: `${score.me}–${score.cpu}`,
+          text: `Win streak ${streak} · best ${best}`,
+          button: 'Again',
+          onStart: start,
+        });
+      } else serve(who === 'me' ? -1 : 1);
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#2c2c2e';
+      ctx.setLineDash([6, 6]);
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#3a3a3c';
+      ctx.font = `800 ${Math.round(h * 0.16)}px -apple-system, system-ui`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(score.cpu, w / 2, h * 0.3);
+      ctx.fillText(score.me, w / 2, h * 0.7);
+
+      const pw = PW(), ph = PH();
+      ctx.fillStyle = '#ff453a';
+      ctx.fillRect(cpu.x - pw / 2, 34, pw, ph);
+      ctx.fillStyle = '#30d158';
+      ctx.fillRect(me.x - pw / 2, h - ph - 8, pw, ph);
+
+      if (serveT <= 0 || Math.floor(serveT * 6) % 2 === 0) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(ball.x, ball.y, BR(), 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    W.pointer(canvas, {
+      down(p) { me.x = W.clamp(p.x, PW() / 2, view.w - PW() / 2); },
+      move(p) { me.x = W.clamp(p.x, PW() / 2, view.w - PW() / 2); },
+    });
+    const keys = {};
+    window.addEventListener('keydown', e => (keys[e.key] = true));
+    window.addEventListener('keyup', e => (keys[e.key] = false));
+
+    function start() {
+      reset();
+      state = 'play';
+    }
+
+    reset();
+    W.overlay({ title: '🏓 Pong', text: `Slide your finger to move.<br>First to ${TO_WIN} wins.`, onStart: start });
+
+    W.loop(dt => {
+      if (keys.ArrowLeft) me.x -= view.w * 1.5 * dt;
+      if (keys.ArrowRight) me.x += view.w * 1.5 * dt;
+      me.x = W.clamp(me.x, PW() / 2, view.w - PW() / 2);
+      if (state === 'play') update(dt);
+      render();
+    });
+  </script>
+</body>
+</html>

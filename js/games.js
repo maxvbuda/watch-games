@@ -7,4 +7,5 @@ window.GAMES = [
   { id: 'tictactoe', name: 'Tic-Tac-Toe', emoji: '⭕', color: '#0a84ff', desc: 'Beat the watch' },
   { id: 'whack', name: 'Whack-a-Mole', emoji: '🐹', color: '#ac8e68', desc: '30 seconds of bonking' },
   { id: 'simon', name: 'Simon', emoji: '🔴', color: '#ff453a', desc: 'Repeat the pattern' },
+  { id: 'pong', name: 'Pong', emoji: '🏓', color: '#64d2ff', desc: 'First to 7 vs the watch' },
 ];
