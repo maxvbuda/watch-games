@@ -89,7 +89,7 @@
       ctx.fillStyle = '#a8703c'; ctx.beginPath(); ctx.ellipse(m.x, m.y + 6, 16, 6, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(p.x - 7, p.y); ctx.lineTo(p.x + 7, p.y); ctx.lineTo(p.x + 7, p.y + 4); ctx.lineTo(p.x, p.y + 8); ctx.lineTo(p.x - 7, p.y + 4); ctx.fill();
       // Stadium lights.
-      for (const x of [w * 0.1, w * 0.9]) { ctx.fillStyle = '#fff9c4'; ctx.fillRect(x - 6, h * 0.05, 12, 5); }
+      for (const x of [w * 0.3, w * 0.7]) { ctx.fillStyle = "#fff9c4"; ctx.fillRect(x - 6, h * 0.13, 12, 4); }
 
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000';
       ctx.font = '20px sans-serif';
