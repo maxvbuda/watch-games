@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Piano Tiles</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>.back { background: rgba(0, 0, 0, 0.45); } .hud { color: #000; text-shadow: 0 0 3px #fff; }</style>
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const COLS = 4;
+    const NOTES = [261.6, 293.7, 329.6, 349.2, 392, 440, 493.9, 523.3];
+
+    let rows, speed, score, state = 'ready', started, miss, audio;
+    const RH = () => view.h / 4;
+
+    function note(i) {
+      try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.type = 'triangle';
+        o.frequency.value = NOTES[i % NOTES.length];
+        g.gain.setValueAtTime(0.2, audio.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.4);
+        o.connect(g).connect(audio.destination);
+        o.start();
+        o.stop(audio.currentTime + 0.4);
+      } catch (e) {}
+    }
+
+    function addRow(y) {
+      const prev = rows[rows.length - 1];
+      let col = W.randInt(0, COLS - 1);
+      if (prev && col === prev.col && Math.random() < 0.6) col = (col + W.randInt(1, 3)) % COLS;
+      rows.push({ col, y, hit: false });
+    }
+
+    function reset() {
+      rows = [];
+      score = 0;
+      speed = 0;
+      started = false;
+      miss = null;
+      // Start tile sits on the second row from the bottom.
+      for (let i = 0; i < 6; i++) addRow(view.h - RH() * (i + 2));
+      hud.textContent = '0';
+    }
+
+    function tap(p) {
+      if (state !== 'play') return;
+      const target = rows.find(r => !r.hit);
+      const col = Math.floor(p.x / (view.w / COLS));
+      const rh = RH();
+      if (col === target.col && p.y >= target.y - rh * 0.25 && p.y <= target.y + rh * 1.15) {
+        target.hit = true;
+        score++;
+        hud.textContent = score;
+        note(score);
+        if (!started) { started = true; speed = view.h * 0.9; }
+      } else {
+        // Wrong tap: mark the square the player actually pressed (in whatever row they hit).
+        const row = rows.find(r => p.y >= r.y && p.y < r.y + rh) || target;
+        miss = { col, y: row.y };
+        end();
+      }
+    }
+
+    function end() {
+      state = 'over';
+      const best = W.best('tiles', score);
+      setTimeout(() => W.overlay({ title: 'Wrong note!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 900);
+    }
+
+    function update(dt) {
+      if (!started) return;
+      speed += view.h * 0.02 * dt;
+      for (const r of rows) r.y += speed * dt;
+      const rh = RH();
+      const lowest = rows.find(r => !r.hit);
+      if (lowest && lowest.y > view.h) {
+        // Scroll back so the missed tile is visible, highlighted in red.
+        const back = lowest.y - (view.h - rh);
+        for (const r of rows) r.y -= back;
+        miss = { col: lowest.col, y: lowest.y };
+        return end();
+      }
+      while (rows.length && rows[0].y > view.h) rows.shift();
+      while (rows[rows.length - 1].y > -rh) addRow(rows[rows.length - 1].y - rh);
+    }
+
+    function render() {
+      const { w, h } = view;
+      const cw = w / COLS, rh = RH();
+      ctx.fillStyle = '#f2f2f7';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#d1d1d6';
+      for (let c = 1; c < COLS; c++) ctx.fillRect(c * cw - 0.5, 0, 1, h);
+      for (const r of rows) {
+        ctx.fillStyle = r.hit ? '#c7c7cc' : '#1c1c1e';
+        ctx.fillRect(r.col * cw + 1, r.y + 1, cw - 2, rh - 2);
+        if (!started && r === rows[0]) {
+          ctx.fillStyle = '#fff';
+          ctx.font = `700 ${Math.round(cw * 0.26)}px -apple-system, system-ui`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('START', r.col * cw + cw / 2, r.y + rh / 2);
+        }
+      }
+      if (miss) {
+        ctx.fillStyle = '#ff453a';
+        ctx.fillRect(miss.col * cw + 1, miss.y + 1, cw - 2, rh - 2);
+      }
+    }
+
+    W.pointer(canvas, { down: tap });
+
+    function start() {
+      reset();
+      state = 'play';
+    }
+
+    reset();
+    W.overlay({ title: '🎹 Piano Tiles', text: 'Tap only the black tiles,<br>bottom to top. Don\'t miss!', onStart: start });
+
+    W.loop(dt => {
+      if (state === 'play') update(dt);
+      render();
+    });
+  </script>
+</body>
+</html>

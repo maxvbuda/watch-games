@@ -15,4 +15,5 @@ window.GAMES = [
   { id: 'reaction', name: 'Reaction', emoji: '⚡', color: '#ffd60a', desc: 'How fast are you?', unit: ' ms' },
   { id: 'dodge', name: 'Asteroid Dodge', emoji: '☄️', color: '#ff9f0a', desc: 'Fly, dodge, grab stars' },
   { id: 'math', name: 'Math Blitz', emoji: '🧮', color: '#0a84ff', desc: 'Quick-fire arithmetic' },
+  { id: 'tiles', name: 'Piano Tiles', emoji: '🎹', color: '#e5e5ea', desc: 'Tap the black tiles' },
 ];
