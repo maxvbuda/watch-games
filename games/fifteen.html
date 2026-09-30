@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>15 Puzzle</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 28px; }
+    #board {
+      --size: min(96vw, calc(100vh - 34px));
+      position: relative; width: var(--size); height: var(--size);
+      background: #1c1c1e; border-radius: 10px;
+    }
+    .t {
+      position: absolute; width: calc(25% - 4px); height: calc(25% - 4px); margin: 2px;
+      border-radius: 8px; background: #ff9f0a; color: #000;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: calc(var(--size) / 7); font-variant-numeric: tabular-nums;
+      transition: left 0.1s, top 0.1s;
+    }
+    .t.home { background: #30d158; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="board"></div></div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const N = 4;
+    const boardEl = document.getElementById('board');
+    const hud = document.getElementById('hud');
+    let tiles, moves, startTime, timer, done;   // tiles[pos] = number (0 = empty)
+    const els = {};
+
+    for (let n = 1; n < N * N; n++) {
+      const d = document.createElement('div');
+      d.className = 't';
+      d.textContent = n;
+      boardEl.appendChild(d);
+      els[n] = d;
+    }
+
+    function draw() {
+      tiles.forEach((n, pos) => {
+        if (!n) return;
+        els[n].style.left = (pos % N) * 25 + '%';
+        els[n].style.top = Math.floor(pos / N) * 25 + '%';
+        els[n].classList.toggle('home', n === pos + 1);
+      });
+      const secs = startTime ? Math.round((Date.now() - startTime) / 1000) : 0;
+      hud.innerHTML = `${moves}<small>${secs}s</small>`;
+    }
+
+    // Slide the tile (and any between it and the gap in the same row/column).
+    function slideFrom(pos) {
+      const e = tiles.indexOf(0);
+      const [px, py, ex, ey] = [pos % N, Math.floor(pos / N), e % N, Math.floor(e / N)];
+      if (px !== ex && py !== ey) return false;
+      const step = px === ex ? (py < ey ? N : -N) : (px < ex ? 1 : -1);
+      for (let p = e; p !== pos; p -= step) [tiles[p], tiles[p - step]] = [tiles[p - step], tiles[p]];
+      return true;
+    }
+
+    function tapTile(n) {
+      if (done) return;
+      if (!slideFrom(tiles.indexOf(n))) return;
+      if (!startTime) { startTime = Date.now(); timer = setInterval(draw, 1000); }
+      moves++;
+      draw();
+      if (tiles.every((n, i) => n === (i + 1) % (N * N))) {
+        done = true;
+        clearInterval(timer);
+        const secs = Math.round((Date.now() - startTime) / 1000);
+        const best = W.best('fifteen', moves, true);
+        setTimeout(() => W.overlay({ title: 'Solved! 🧩', big: moves + ' moves', text: `${secs}s · best ${best} moves`, button: 'Again', onStart: start }), 400);
+      }
+    }
+
+    // Swipes move the tile next to the gap into it.
+    W.swipe(document.getElementById('area'), d => {
+      const e = tiles.indexOf(0), ex = e % N, ey = Math.floor(e / N);
+      const from = { left: [ex + 1, ey], right: [ex - 1, ey], up: [ex, ey + 1], down: [ex, ey - 1] }[d];
+      if (from[0] >= 0 && from[0] < N && from[1] >= 0 && from[1] < N) tapTile(tiles[from[1] * N + from[0]]);
+    }, p => {
+      // Taps come through the swipe handler (it swallows the native click).
+      const a = document.getElementById('area').getBoundingClientRect();
+      const el = document.elementFromPoint(a.left + p.x, a.top + p.y);
+      if (el && el.classList.contains('t')) tapTile(Number(el.textContent));
+    });
+
+    function start() {
+      clearInterval(timer);
+      tiles = [...Array(N * N).keys()].map(i => (i + 1) % (N * N));
+      // Shuffle with random legal moves so it stays solvable.
+      let prev = -1;
+      for (let k = 0; k < 200; k++) {
+        const e = tiles.indexOf(0), ex = e % N, ey = Math.floor(e / N);
+        const opts = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+          .map(([dx, dy]) => [ex + dx, ey + dy]).filter(([x, y]) => x >= 0 && y >= 0 && x < N && y < N)
+          .map(([x, y]) => y * N + x).filter(p => p !== prev);
+        const p = W.pick(opts);
+        prev = e;
+        [tiles[e], tiles[p]] = [tiles[p], tiles[e]];
+      }
+      moves = 0; startTime = 0; done = false;
+      draw();
+    }
+
+    start();
+  </script>
+</body>
+</html>
