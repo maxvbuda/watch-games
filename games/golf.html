@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Mini Golf</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+
+    // Holes in normalised course coords. Walls are [x1, y1, x2, y2].
+    const HOLES = [
+      { par: 2, ball: [0.5, 0.88], hole: [0.5, 0.14], walls: [[0.3, 0.5, 0.7, 0.54]] },
+      { par: 3, ball: [0.82, 0.88], hole: [0.82, 0.14], walls: [[0.25, 0.48, 1, 0.52]] },
+      { par: 3, ball: [0.15, 0.88], hole: [0.15, 0.12], walls: [[0.3, 0.63, 1, 0.67], [0, 0.33, 0.7, 0.37]] },
+      { par: 3, ball: [0.5, 0.88], hole: [0.5, 0.24], walls: [[0.28, 0.08, 0.32, 0.4], [0.68, 0.08, 0.72, 0.4], [0.28, 0.08, 0.72, 0.12], [0.4, 0.56, 0.6, 0.6]] },
+      { par: 4, ball: [0.1, 0.9], hole: [0.9, 0.1], walls: [[0.2, 0.2, 0.24, 1], [0.45, 0, 0.49, 0.8], [0.7, 0.2, 0.74, 1]] },
+      { par: 3, ball: [0.5, 0.9], hole: [0.5, 0.1], walls: [[0.15, 0.3, 0.4, 0.34], [0.6, 0.3, 0.85, 0.34], [0.35, 0.6, 0.65, 0.64], [0, 0.45, 0.12, 0.49], [0.88, 0.45, 1, 0.49]] },
+    ];
+
+    let course, idx, ball, strokes, total, aim = null, state = 'ready', sinkT = 0;
+    const R = () => course.w * 0.03;
+
+    function layout() {
+      const top = 30, pad = 5;
+      course = { x: pad, y: top, w: view.w - pad * 2, h: view.h - top - pad };
+    }
+    const toX = x => course.x + x * course.w;
+    const toY = y => course.y + y * course.h;
+
+    function loadHole(i) {
+      layout();
+      idx = i;
+      const H = HOLES[i];
+      ball = { x: toX(H.ball[0]), y: toY(H.ball[1]), vx: 0, vy: 0, sunk: false };
+      strokes = 0;
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `${strokes}<small>hole ${idx + 1} · par ${HOLES[idx].par}</small>`; }
+
+    const moving = () => Math.hypot(ball.vx, ball.vy) > 2;
+
+    function update(dt) {
+      if (ball.sunk) {
+        sinkT -= dt;
+        if (sinkT <= 0) nextHole();
+        return;
+      }
+      const steps = 4, r = R();
+      for (let s = 0; s < steps; s++) {
+        const h = dt / steps;
+        ball.x += ball.vx * h;
+        ball.y += ball.vy * h;
+        // Course edges.
+        if (ball.x < course.x + r) { ball.x = course.x + r; ball.vx = Math.abs(ball.vx) * 0.8; }
+        if (ball.x > course.x + course.w - r) { ball.x = course.x + course.w - r; ball.vx = -Math.abs(ball.vx) * 0.8; }
+        if (ball.y < course.y + r) { ball.y = course.y + r; ball.vy = Math.abs(ball.vy) * 0.8; }
+        if (ball.y > course.y + course.h - r) { ball.y = course.y + course.h - r; ball.vy = -Math.abs(ball.vy) * 0.8; }
+        // Walls: push out along the closest-point normal and reflect.
+        for (const [x1, y1, x2, y2] of HOLES[idx].walls) {
+          const L = toX(x1), T = toY(y1), Rr = toX(x2), B = toY(y2);
+          const cx = W.clamp(ball.x, L, Rr), cy = W.clamp(ball.y, T, B);
+          let dx = ball.x - cx, dy = ball.y - cy;
+          const d = Math.hypot(dx, dy);
+          if (d < r) {
+            if (d === 0) { dx = 0; dy = -1; } else { dx /= d; dy /= d; }
+            ball.x = cx + dx * r; ball.y = cy + dy * r;
+            const dot = ball.vx * dx + ball.vy * dy;
+            if (dot < 0) { ball.vx -= 2 * dot * dx * 0.9; ball.vy -= 2 * dot * dy * 0.9; }
+          }
+        }
+      }
+      const f = Math.pow(0.35, dt);   // rolling friction
+      ball.vx *= f; ball.vy *= f;
+      if (!moving()) { ball.vx = 0; ball.vy = 0; }
+
+      const H = HOLES[idx];
+      const hx = toX(H.hole[0]), hy = toY(H.hole[1]);
+      const d = Math.hypot(ball.x - hx, ball.y - hy);
+      if (d < R() * 1.4 && Math.hypot(ball.vx, ball.vy) < course.w * 2.2) {
+        ball.sunk = true; ball.x = hx; ball.y = hy; sinkT = 0.8;
+      } else if (d < R() * 3) {
+        // Holes pull gently when you're close.
+        ball.vx += (hx - ball.x) * 3 * dt; ball.vy += (hy - ball.y) * 3 * dt;
+      }
+    }
+
+    function nextHole() {
+      total.push(strokes);
+      if (idx + 1 < HOLES.length) return loadHole(idx + 1);
+      state = 'over';
+      const sum = total.reduce((a, b) => a + b, 0), par = HOLES.reduce((a, h) => a + h.par, 0);
+      const diff = sum - par;
+      const best = W.best('golf', sum, true);
+      W.overlay({ title: 'Round over ⛳️', big: `${sum} (${diff === 0 ? 'E' : diff > 0 ? '+' + diff : diff})`, text: `Par ${par} · best ${best}`, button: 'Again', onStart: start });
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      if (!course) return;
+      ctx.fillStyle = '#2f8f3f';
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(course.x, course.y, course.w, course.h, 10) : ctx.rect(course.x, course.y, course.w, course.h);
+      ctx.fill();
+      ctx.fillStyle = '#8b5a2b';
+      for (const [x1, y1, x2, y2] of HOLES[idx].walls) ctx.fillRect(toX(x1), toY(y1), toX(x2) - toX(x1), toY(y2) - toY(y1));
+      const H = HOLES[idx], r = R();
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.arc(toX(H.hole[0]), toY(H.hole[1]), r * 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(toX(H.hole[0]), toY(H.hole[1])); ctx.lineTo(toX(H.hole[0]), toY(H.hole[1]) - r * 5); ctx.stroke();
+      ctx.fillStyle = '#ff453a';
+      ctx.beginPath(); ctx.moveTo(toX(H.hole[0]), toY(H.hole[1]) - r * 5); ctx.lineTo(toX(H.hole[0]) + r * 3, toY(H.hole[1]) - r * 4.2); ctx.lineTo(toX(H.hole[0]), toY(H.hole[1]) - r * 3.4); ctx.fill();
+
+      if (aim) {
+        // Pull back to aim: the shot goes opposite to your drag.
+        const dx = aim.sx - aim.x, dy = aim.sy - aim.y;
+        const len = Math.min(Math.hypot(dx, dy), course.w * 0.45);
+        const a = Math.atan2(dy, dx);
+        ctx.strokeStyle = '#ffffffaa'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(ball.x, ball.y); ctx.lineTo(ball.x + Math.cos(a) * len * 1.3, ball.y + Math.sin(a) * len * 1.3); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (!ball.sunk || sinkT > 0.5) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.sunk ? r * 0.7 : r, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    W.pointer(canvas, {
+      down(p) { if (state === 'play' && !moving() && !ball.sunk) aim = { sx: p.x, sy: p.y, x: p.x, y: p.y }; },
+      move(p) { if (aim) { aim.x = p.x; aim.y = p.y; } },
+      up() {
+        if (!aim) return;
+        const dx = aim.sx - aim.x, dy = aim.sy - aim.y;
+        const len = Math.min(Math.hypot(dx, dy), course.w * 0.45);
+        aim = null;
+        if (len < 6) return;
+        const a = Math.atan2(dy, dx), power = len / (course.w * 0.45);
+        ball.vx = Math.cos(a) * power * course.w * 3.2;
+        ball.vy = Math.sin(a) * power * course.w * 3.2;
+        strokes++;
+        updateHud();
+      },
+    });
+
+    function start() { total = []; loadHole(0); state = 'play'; }
+    total = []; loadHole(0);
+    W.overlay({ title: '⛳️ Mini Golf', text: 'Drag back and release<br>to putt. 6 holes.', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(); });
+  </script>
+</body>
+</html>
