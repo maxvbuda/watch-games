@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Tic-Tac-Toe</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 24px; gap: 4px; }
+    #status { font-size: 12px; color: var(--muted); height: 14px; }
+    #board {
+      --size: min(92vw, calc(100vh - 52px));
+      width: var(--size);
+      height: var(--size);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 4px;
+    }
+    .sq {
+      border: 0;
+      border-radius: 10px;
+      background: #1c1c1e;
+      color: #fff;
+      font: inherit;
+      font-weight: 800;
+      font-size: calc(var(--size) / 4.2);
+      line-height: 1;
+      min-height: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .sq.x { color: #0a84ff; }
+    .sq.o { color: #ff9f0a; }
+    .sq.win { background: #30d15844; }
+    #hud small { color: var(--muted); }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="status"></div>
+    <div id="board"></div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const boardEl = document.getElementById('board');
+    const statusEl = document.getElementById('status');
+    const hud = document.getElementById('hud');
+    const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    const tally = { w: 0, l: 0, d: 0 };
+    let board, busy, done, youStart = true;
+
+    const sqs = [];
+    for (let i = 0; i < 9; i++) {
+      const b = document.createElement('button');
+      b.className = 'sq';
+      b.addEventListener('click', () => play(i));
+      boardEl.appendChild(b);
+      sqs.push(b);
+    }
+
+    function winner(b) {
+      for (const l of LINES) if (b[l[0]] && b[l[0]] === b[l[1]] && b[l[1]] === b[l[2]]) return { p: b[l[0]], line: l };
+      return b.includes(null) ? null : { p: 'draw', line: [] };
+    }
+
+    function minimax(b, player, depth) {
+      const w = winner(b);
+      if (w) return { score: w.p === 'O' ? 10 - depth : w.p === 'X' ? depth - 10 : 0 };
+      let best = { score: player === 'O' ? -Infinity : Infinity };
+      for (let i = 0; i < 9; i++) {
+        if (b[i]) continue;
+        b[i] = player;
+        const r = minimax(b, player === 'O' ? 'X' : 'O', depth + 1);
+        b[i] = null;
+        if (player === 'O' ? r.score > best.score : r.score < best.score) best = { score: r.score, move: i };
+      }
+      return best;
+    }
+
+    function aiMove() {
+      const empty = board.map((v, i) => v ? -1 : i).filter(i => i >= 0);
+      // Slightly imperfect so the game is winnable.
+      if (Math.random() < 0.2) return W.pick(empty);
+      return minimax(board, 'O', 0).move;
+    }
+
+    function draw() {
+      board.forEach((v, i) => {
+        sqs[i].textContent = v === 'X' ? '✕' : v === 'O' ? '○' : '';
+        sqs[i].className = 'sq' + (v ? ' ' + v.toLowerCase() : '');
+      });
+      hud.innerHTML = `${tally.w}–${tally.l}<small>draws ${tally.d}</small>`;
+    }
+
+    function check() {
+      const w = winner(board);
+      if (!w) return false;
+      done = true;
+      w.line.forEach(i => sqs[i].classList.add('win'));
+      if (w.p === 'X') { tally.w++; statusEl.textContent = 'You win! 🎉'; W.best('tictactoe', tally.w); }
+      else if (w.p === 'O') { tally.l++; statusEl.textContent = 'Watch wins 🤖'; }
+      else { tally.d++; statusEl.textContent = 'Draw'; }
+      draw();
+      w.line.forEach(i => sqs[i].classList.add('win'));
+      setTimeout(() => W.overlay({ title: statusEl.textContent, text: 'Wins this session: ' + tally.w, button: 'Next', onStart: start }), 900);
+      return true;
+    }
+
+    function play(i) {
+      if (busy || done || board[i]) return;
+      board[i] = 'X';
+      draw();
+      if (check()) return;
+      aiTurn();
+    }
+
+    function aiTurn() {
+      busy = true;
+      statusEl.textContent = 'Thinking…';
+      setTimeout(() => {
+        board[aiMove()] = 'O';
+        busy = false;
+        statusEl.textContent = 'Your turn (✕)';
+        draw();
+        check();
+      }, 350);
+    }
+
+    function start() {
+      board = new Array(9).fill(null);
+      done = false;
+      busy = false;
+      statusEl.textContent = 'Your turn (✕)';
+      draw();
+      if (!youStart) aiTurn();
+      youStart = !youStart;
+    }
+
+    start();
+  </script>
+</body>
+</html>
