@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Blocks</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const COLS = 10, ROWS = 16;
+    let cell, ox, oy;
+    const view = W.setupCanvas(canvas, (w, h) => {
+      cell = Math.floor(Math.min((w - 44) / COLS, (h - 8) / ROWS));
+      ox = 6;
+      oy = Math.floor((h - cell * ROWS) / 2);
+    });
+    const ctx = view.ctx;
+
+    const SHAPES = {
+      I: { c: '#64d2ff', m: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]] },
+      O: { c: '#ffd60a', m: [[1,1],[1,1]] },
+      T: { c: '#bf5af2', m: [[0,1,0],[1,1,1],[0,0,0]] },
+      S: { c: '#30d158', m: [[0,1,1],[1,1,0],[0,0,0]] },
+      Z: { c: '#ff453a', m: [[1,1,0],[0,1,1],[0,0,0]] },
+      J: { c: '#0a84ff', m: [[1,0,0],[1,1,1],[0,0,0]] },
+      L: { c: '#ff9f0a', m: [[0,0,1],[1,1,1],[0,0,0]] },
+    };
+    let board, piece, next, bag = [], score, lines, level, dropT, state = 'ready', flash = [];
+
+    function takeFromBag() {
+      if (!bag.length) bag = Object.keys(SHAPES).sort(() => Math.random() - 0.5);
+      const k = bag.pop();
+      return { k, m: SHAPES[k].m.map(r => [...r]), c: SHAPES[k].c };
+    }
+
+    function spawn() {
+      piece = next || takeFromBag();
+      next = takeFromBag();
+      piece.x = Math.floor((COLS - piece.m[0].length) / 2);
+      piece.y = piece.k === 'I' ? -1 : 0;
+      if (collides(piece.m, piece.x, piece.y)) gameOver();
+    }
+
+    function collides(m, px, py) {
+      for (let y = 0; y < m.length; y++) for (let x = 0; x < m[y].length; x++) {
+        if (!m[y][x]) continue;
+        const bx = px + x, by = py + y;
+        if (bx < 0 || bx >= COLS || by >= ROWS) return true;
+        if (by >= 0 && board[by][bx]) return true;
+      }
+      return false;
+    }
+
+    function move(dx) {
+      if (state === 'play' && !collides(piece.m, piece.x + dx, piece.y)) piece.x += dx;
+    }
+
+    function rotate() {
+      if (state !== 'play') return;
+      const m = piece.m;
+      const r = m[0].map((_, i) => m.map(row => row[i]).reverse());
+      // Wall kicks: try shifting a little if the rotated piece doesn't fit.
+      for (const k of [0, -1, 1, -2, 2]) {
+        if (!collides(r, piece.x + k, piece.y)) { piece.m = r; piece.x += k; return; }
+      }
+    }
+
+    function softDrop() {
+      if (!collides(piece.m, piece.x, piece.y + 1)) { piece.y++; return true; }
+      lock();
+      return false;
+    }
+
+    function hardDrop() {
+      if (state !== 'play') return;
+      let n = 0;
+      while (!collides(piece.m, piece.x, piece.y + 1)) { piece.y++; n++; }
+      score += n * 2;
+      lock();
+    }
+
+    function lock() {
+      piece.m.forEach((row, y) => row.forEach((v, x) => {
+        if (v && piece.y + y >= 0) board[piece.y + y][piece.x + x] = piece.c;
+      }));
+      const full = [];
+      board.forEach((row, y) => { if (row.every(Boolean)) full.push(y); });
+      if (full.length) {
+        full.forEach(y => { board.splice(y, 1); board.unshift(new Array(COLS).fill(null)); });
+        lines += full.length;
+        score += [0, 100, 300, 500, 800][full.length] * level;
+        level = 1 + Math.floor(lines / 8);
+        flash = full.map(y => ({ y, t: 0.25 }));
+      }
+      updateHud();
+      spawn();
+    }
+
+    function updateHud() { hud.innerHTML = `${score}<small>L${level} · ${lines}</small>`; }
+
+    function gameOver() {
+      state = 'over';
+      const best = W.best('blocks', score);
+      setTimeout(() => W.overlay({ title: 'Topped out', big: score, text: `${lines} lines · best ${best}`, button: 'Again', onStart: start }), 500);
+    }
+
+    function update(dt) {
+      dropT -= dt;
+      const interval = Math.max(0.08, 0.75 * Math.pow(0.85, level - 1));
+      if (dropT <= 0) { dropT = interval; softDrop(); }
+    }
+
+    function drawCell(x, y, c, alpha = 1) {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = c;
+      ctx.fillRect(ox + x * cell + 0.5, oy + y * cell + 0.5, cell - 1, cell - 1);
+      ctx.globalAlpha = 1;
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#141416';
+      ctx.fillRect(ox, oy, COLS * cell, ROWS * cell);
+      board.forEach((row, y) => row.forEach((c, x) => { if (c) drawCell(x, y, c); }));
+
+      if (state === 'play' && piece) {
+        let gy = piece.y;
+        while (!collides(piece.m, piece.x, gy + 1)) gy++;
+        piece.m.forEach((row, y) => row.forEach((v, x) => {
+          if (!v) return;
+          if (gy + y >= 0) drawCell(piece.x + x, gy + y, piece.c, 0.25);
+          if (piece.y + y >= 0) drawCell(piece.x + x, piece.y + y, piece.c);
+        }));
+      }
+      for (const f of flash) {
+        f.t -= dt;
+        ctx.fillStyle = `rgba(255,255,255,${Math.max(0, f.t * 3)})`;
+        ctx.fillRect(ox, oy + f.y * cell, COLS * cell, cell);
+      }
+      flash = flash.filter(f => f.t > 0);
+
+      // Next piece preview on the right.
+      const px = ox + COLS * cell + 6, s = Math.floor(cell * 0.7);
+      ctx.fillStyle = '#8e8e93';
+      ctx.font = '600 9px -apple-system, system-ui';
+      ctx.textAlign = 'left';
+      ctx.fillText('NEXT', px, h * 0.42);
+      if (next) next.m.forEach((row, y) => row.forEach((v, x) => {
+        if (v) { ctx.fillStyle = next.c; ctx.fillRect(px + x * s, h * 0.45 + y * s, s - 1, s - 1); }
+      }));
+    }
+
+    W.swipe(canvas, d => {
+      if (state !== 'play') return;
+      if (d === 'left') move(-1);
+      if (d === 'right') move(1);
+      if (d === 'down') hardDrop();
+      if (d === 'up') rotate();
+    }, rotate);
+    window.addEventListener('keydown', e => { if (e.key === ' ') hardDrop(); });
+
+    // Crown slides the piece sideways: ~22px of scroll per column.
+    let crownAcc = 0;
+    W.crown(d => {
+      crownAcc += d;
+      while (crownAcc > 22) { move(1); crownAcc -= 22; }
+      while (crownAcc < -22) { move(-1); crownAcc += 22; }
+    });
+
+    function start() {
+      board = Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
+      score = 0; lines = 0; level = 1; dropT = 0.8; next = null; bag = [];
+      spawn();
+      updateHud();
+      state = 'play';
+    }
+
+    board = Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
+    W.overlay({ title: '🟦 Blocks', text: 'Tap: rotate · Swipe ↓: drop<br>Swipe or turn the Crown<br>to move sideways.', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
