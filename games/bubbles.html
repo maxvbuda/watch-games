@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Bubble Shooter</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const COLS = 8, TOP = 30;
+    const COLORS = ['#ff453a', '#ffd60a', '#30d158', '#0a84ff', '#bf5af2'];
+    let r, rowH;
+    const view = W.setupCanvas(canvas, w => { r = w / (2 * COLS + 1); rowH = r * Math.sqrt(3); });
+    const ctx = view.ctx;
+
+    // rows[i] = { off: 0|1, cells: [colorIndex|null × COLS] }; adjacent rows always have opposite offsets.
+    let rows, aim, shot, cur, next, score, shots, state = 'ready', falling = [];
+
+    const cx = (row, c) => r + c * 2 * r + (rows[row].off ? r : 0);
+    const cy = row => TOP + r + row * rowH;
+    const SX = () => view.w / 2, SY = () => view.h - r - 4;
+
+    function newRow(off) { return { off, cells: Array.from({ length: COLS }, (_, c) => (off && c === COLS - 1 ? null : W.randInt(0, COLORS.length - 1))) }; }
+    const colorsLeft = () => [...new Set(rows.flatMap(rw => rw.cells).filter(v => v !== null))];
+    function pickColor() { const left = colorsLeft(); return left.length ? W.pick(left) : W.randInt(0, COLORS.length - 1); }
+
+    function reset() {
+      rows = [];
+      for (let i = 0; i < 5; i++) rows.push(newRow(i % 2));
+      aim = -Math.PI / 2; shot = null; score = 0; shots = 0;
+      cur = pickColor(); next = pickColor();
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `${score}<small>${7 - (shots % 7)} to drop</small>`; }
+
+    function neighbors(row, c) {
+      const off = rows[row].off, out = [[row, c - 1], [row, c + 1]];
+      for (const dr of [-1, 1]) {
+        const rr = row + dr;
+        if (rr < 0 || rr >= rows.length) continue;
+        // If this row is shifted right, the cells above/below are c and c+1; otherwise c-1 and c.
+        for (const cc of off ? [c, c + 1] : [c - 1, c]) out.push([rr, cc]);
+      }
+      return out.filter(([rr, cc]) => rr >= 0 && rr < rows.length && cc >= 0 && cc < COLS && !(rows[rr].off && cc === COLS - 1));
+    }
+
+    function fire() {
+      if (state !== 'play' || shot) return;
+      const sp = view.h * 2.2;
+      shot = { x: SX(), y: SY(), vx: Math.cos(aim) * sp, vy: Math.sin(aim) * sp, color: cur };
+      cur = next; next = pickColor();
+    }
+
+    function snap(x, y, color) {
+      // Nearest empty cell to the landing point.
+      let best = null, bd = Infinity;
+      const approx = Math.round((y - TOP - r) / rowH);
+      for (let row = Math.max(0, approx - 1); row <= approx + 1; row++) {
+        while (row >= rows.length) rows.push({ off: 1 - rows[rows.length - 1].off, cells: new Array(COLS).fill(null) });
+        for (let c = 0; c < COLS; c++) {
+          if (rows[row].cells[c] !== null || (rows[row].off && c === COLS - 1)) continue;
+          const d = Math.hypot(cx(row, c) - x, cy(row) - y);
+          if (d < bd) { bd = d; best = [row, c]; }
+        }
+      }
+      const [row, c] = best;
+      rows[row].cells[c] = color;
+      resolve(row, c);
+    }
+
+    function resolve(row, c) {
+      const color = rows[row].cells[c];
+      const group = [[row, c]], seen = new Set([row + ',' + c]);
+      for (let i = 0; i < group.length; i++) {
+        for (const [rr, cc] of neighbors(...group[i])) {
+          const k = rr + ',' + cc;
+          if (!seen.has(k) && rows[rr].cells[cc] === color) { seen.add(k); group.push([rr, cc]); }
+        }
+      }
+      shots++;
+      if (group.length >= 3) {
+        for (const [rr, cc] of group) { falling.push({ x: cx(rr, cc), y: cy(rr), vy: -40, color: rows[rr].cells[cc] }); rows[rr].cells[cc] = null; }
+        score += group.length * 10;
+        // Drop anything no longer connected to the top row.
+        const attached = new Set(), stack = [];
+        rows[0].cells.forEach((v, cc) => { if (v !== null) { attached.add('0,' + cc); stack.push([0, cc]); } });
+        while (stack.length) for (const [rr, cc] of neighbors(...stack.pop())) {
+          const k = rr + ',' + cc;
+          if (!attached.has(k) && rows[rr].cells[cc] !== null) { attached.add(k); stack.push([rr, cc]); }
+        }
+        rows.forEach((rw, rr) => rw.cells.forEach((v, cc) => {
+          if (v !== null && !attached.has(rr + ',' + cc)) { falling.push({ x: cx(rr, cc), y: cy(rr), vy: 0, color: v }); rw.cells[cc] = null; score += 20; }
+        }));
+      }
+      while (rows.length && rows[rows.length - 1].cells.every(v => v === null)) rows.pop();
+      if (!rows.length) { rows.push(newRow(0)); score += 200; }
+      if (shots % 7 === 0) rows.unshift(newRow(1 - rows[0].off));   // ceiling drops
+      updateHud();
+      if (rows.length && cy(rows.length - 1) + r > SY() - r * 1.5) {
+        state = 'over';
+        const best = W.best('bubbles', score);
+        setTimeout(() => W.overlay({ title: 'Too low!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 500);
+      }
+    }
+
+    function update(dt) {
+      if (!shot) return;
+      const steps = 4;
+      for (let s = 0; s < steps; s++) {
+        shot.x += shot.vx * dt / steps; shot.y += shot.vy * dt / steps;
+        if (shot.x < r) { shot.x = r; shot.vx = Math.abs(shot.vx); }
+        if (shot.x > view.w - r) { shot.x = view.w - r; shot.vx = -Math.abs(shot.vx); }
+        let hit = shot.y <= TOP + r;
+        for (let row = 0; row < rows.length && !hit; row++) rows[row].cells.forEach((v, c) => {
+          if (v !== null && Math.hypot(cx(row, c) - shot.x, cy(row) - shot.y) < r * 1.75) hit = true;
+        });
+        if (hit) { const s2 = shot; shot = null; snap(s2.x, s2.y, s2.color); return; }
+      }
+    }
+
+    function bubble(x, y, color, rad = r) {
+      ctx.fillStyle = COLORS[color];
+      ctx.beginPath(); ctx.arc(x, y, rad - 0.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffffff55';
+      ctx.beginPath(); ctx.arc(x - rad * 0.3, y - rad * 0.3, rad * 0.3, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#0b0b18';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#1c1c2e';
+      ctx.fillRect(0, 0, w, TOP);
+      rows.forEach((rw, row) => rw.cells.forEach((v, c) => { if (v !== null) bubble(cx(row, c), cy(row), v); }));
+      // Danger line.
+      ctx.strokeStyle = '#ff453a44'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, SY() - r * 1.5); ctx.lineTo(w, SY() - r * 1.5); ctx.stroke(); ctx.setLineDash([]);
+      if (state === 'play') {
+        // Aim guide with one wall bounce.
+        ctx.strokeStyle = '#ffffff55'; ctx.setLineDash([2, 4]);
+        let x = SX(), y = SY(), vx = Math.cos(aim), vy = Math.sin(aim);
+        ctx.beginPath(); ctx.moveTo(x, y);
+        for (let i = 0; i < 90 && y > TOP; i++) { x += vx * 3; y += vy * 3; if (x < r || x > w - r) vx = -vx; ctx.lineTo(x, y); }
+        ctx.stroke(); ctx.setLineDash([]);
+      }
+      if (shot) bubble(shot.x, shot.y, shot.color);
+      bubble(SX(), SY(), cur);
+      bubble(SX() + r * 3, SY() + r * 0.3, next, r * 0.7);
+      for (const f of falling) { f.vy += 900 * dt; f.y += f.vy * dt; ctx.globalAlpha = 0.8; bubble(f.x, f.y, f.color); }
+      ctx.globalAlpha = 1;
+      falling = falling.filter(f => f.y < h + r);
+    }
+
+    // Drag to aim, lift to fire. Touches near the shooter fire without re-aiming (for Crown aiming).
+    const aimAt = p => { if (p.y < SY() - r * 3) aim = W.clamp(Math.atan2(p.y - SY(), p.x - SX()), -Math.PI + 0.15, -0.15); };
+    W.pointer(canvas, { down: aimAt, move: aimAt, up: fire });
+    W.crown(d => { if (state === 'play') aim = W.clamp(aim + d * 0.008, -Math.PI + 0.15, -0.15); });
+    window.addEventListener('keydown', e => {
+      if (e.key === 'ArrowLeft') aim = W.clamp(aim - 0.08, -Math.PI + 0.15, -0.15);
+      if (e.key === 'ArrowRight') aim = W.clamp(aim + 0.08, -Math.PI + 0.15, -0.15);
+      if (e.key === ' ') fire();
+    });
+
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🫧 Bubble Shooter', text: 'Drag to aim, lift to fire.<br>Or aim with the Crown and<br>tap the shooter. Match 3!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
