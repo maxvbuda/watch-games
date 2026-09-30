@@ -34,4 +34,5 @@ window.GAMES = [
   { id: 'stop', name: 'Perfect Stop', emoji: '🎯', color: '#30d158', desc: 'Stop the needle in the zone' },
   { id: 'cave', name: 'Cave Flyer', emoji: '🦇', color: '#248a3d', desc: 'Hold to rise through the cave' },
   { id: 'hop', name: 'Hop', emoji: '🐔', color: '#48a848', desc: 'Cross roads and rivers' },
+  { id: 'maze', name: 'Maze', emoji: '🌀', color: '#0a84ff', desc: 'Roll to the exit' },
 ];

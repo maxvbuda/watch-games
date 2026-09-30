@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Maze</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const D = { up: [0, -1, 1], right: [1, 0, 2], down: [0, 1, 4], left: [-1, 0, 8] };   // [dx, dy, wall bit]
+
+    let N, walls, pos, draw, level = 1, startT, trail, state = 'ready';
+
+    // Recursive-backtracker maze. walls[i] bitmask of OPEN sides.
+    function generate(n) {
+      const open = new Array(n * n).fill(0), seen = new Array(n * n).fill(false);
+      const stack = [0];
+      seen[0] = true;
+      const opp = { 1: 4, 2: 8, 4: 1, 8: 2 };
+      while (stack.length) {
+        const i = stack[stack.length - 1], x = i % n, y = Math.floor(i / n);
+        const opts = Object.values(D).filter(([dx, dy]) => {
+          const nx = x + dx, ny = y + dy;
+          return nx >= 0 && ny >= 0 && nx < n && ny < n && !seen[ny * n + nx];
+        });
+        if (!opts.length) { stack.pop(); continue; }
+        const [dx, dy, bit] = W.pick(opts);
+        const j = (y + dy) * n + x + dx;
+        open[i] |= bit; open[j] |= opp[bit];
+        seen[j] = true;
+        stack.push(j);
+      }
+      return open;
+    }
+
+    function newLevel() {
+      N = Math.min(5 + level, 14);
+      walls = generate(N);
+      pos = { x: 0, y: 0 };
+      draw = { x: 0, y: 0 };
+      trail = [{ x: 0, y: 0 }];
+      startT = performance.now();
+      state = 'play';
+    }
+
+    // Slide in a direction until reaching a junction, dead end or the exit.
+    function move(d) {
+      if (state !== 'play') return;
+      const [dx, dy, bit] = D[d];
+      let moved = false;
+      while (walls[pos.y * N + pos.x] & bit) {
+        pos.x += dx; pos.y += dy; moved = true;
+        trail.push({ ...pos });
+        if (pos.x === N - 1 && pos.y === N - 1) break;
+        const w = walls[pos.y * N + pos.x];
+        const exits = [1, 2, 4, 8].filter(b => w & b).length;
+        if (exits !== 2 || !(w & bit)) break;
+      }
+      if (moved && pos.x === N - 1 && pos.y === N - 1) {
+        state = 'won';
+        const secs = ((performance.now() - startT) / 1000).toFixed(1);
+        W.best('maze', level);
+        setTimeout(() => W.overlay({ title: `Level ${level} done!`, big: secs + 's', text: 'Next maze is bigger', button: 'Next', onStart: () => { level++; newLevel(); } }), 300);
+      }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      if (!walls) return;
+      const size = Math.min(w - 8, h - 36);
+      const cs = size / N, ox = (w - size) / 2, oy = h - size - 4;
+      draw.x += (pos.x - draw.x) * Math.min(1, dt * 18);
+      draw.y += (pos.y - draw.y) * Math.min(1, dt * 18);
+
+      ctx.fillStyle = '#30d15855';
+      ctx.fillRect(ox + (N - 1) * cs, oy + (N - 1) * cs, cs, cs);
+      ctx.strokeStyle = '#0a84ff55';
+      ctx.lineWidth = Math.max(2, cs * 0.25);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      trail.forEach((p, i) => ctx[i ? 'lineTo' : 'moveTo'](ox + (p.x + 0.5) * cs, oy + (p.y + 0.5) * cs));
+      ctx.stroke();
+
+      ctx.strokeStyle = '#e5e5ea';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'square';
+      ctx.beginPath();
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const o = walls[y * N + x], X = ox + x * cs, Y = oy + y * cs;
+        if (!(o & 1)) { ctx.moveTo(X, Y); ctx.lineTo(X + cs, Y); }
+        if (!(o & 8)) { ctx.moveTo(X, Y); ctx.lineTo(X, Y + cs); }
+        if (x === N - 1 && !(o & 2)) { ctx.moveTo(X + cs, Y); ctx.lineTo(X + cs, Y + cs); }
+        if (y === N - 1 && !(o & 4)) { ctx.moveTo(X, Y + cs); ctx.lineTo(X + cs, Y + cs); }
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = '#0a84ff';
+      ctx.beginPath(); ctx.arc(ox + (draw.x + 0.5) * cs, oy + (draw.y + 0.5) * cs, cs * 0.32, 0, Math.PI * 2); ctx.fill();
+      if (state === 'play') hud.innerHTML = `L${level}<small>${((performance.now() - startT) / 1000).toFixed(0)}s</small>`;
+    }
+
+    W.swipe(canvas, move);
+    W.overlay({ title: '🌀 Maze', text: 'Swipe to roll the ball.<br>It slides to the next turn.<br>Reach the green corner!', onStart: newLevel });
+    W.loop(render);
+  </script>
+</body>
+</html>
