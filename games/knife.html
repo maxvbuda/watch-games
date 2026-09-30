@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Knife Hit</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+
+    let stage, score, rot, spin, spinT, stuck, apples, left, flying, state = 'ready', shake = 0, falling = null;
+    const LR = () => Math.min(view.w, view.h) * 0.22;   // log radius
+    const LY = () => view.h * 0.36;
+    const KL = () => view.h * 0.16;                     // knife length
+
+    function buildStage() {
+      rot = 0;
+      spin = W.rand(1.6, 2.4) * (Math.random() < 0.5 ? -1 : 1);
+      spinT = W.rand(1, 3);
+      left = 5 + Math.min(stage, 5);
+      flying = null;
+      falling = null;
+      // Some knives already stuck in the log on later stages.
+      stuck = [];
+      for (let i = 0; i < Math.min(stage - 1, 3); i++) stuck.push(W.rand(0, Math.PI * 2));
+      apples = Math.random() < 0.6 ? [W.rand(0, Math.PI * 2)] : [];
+      updateHud();
+    }
+
+    function updateHud() { hud.innerHTML = `${score}<small>stage ${stage}</small>`; }
+
+    function throwKnife() {
+      if (state !== 'play' || flying || left <= 0) return;
+      flying = { y: view.h - KL() * 0.4 };
+    }
+
+    // Angle (in log space) of the point at the bottom of the log.
+    const hitAngle = () => ((Math.PI / 2 - rot) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    function near(a, b, tol) {
+      let d = Math.abs(a - b) % (Math.PI * 2);
+      return Math.min(d, Math.PI * 2 - d) < tol;
+    }
+
+    function update(dt) {
+      // Log changes speed/direction now and then.
+      spinT -= dt;
+      if (spinT <= 0) {
+        spinT = W.rand(0.8, 2.5);
+        const s = W.rand(1.2, 2.2 + stage * 0.2);
+        spin = stage > 2 && Math.random() < 0.4 ? -Math.sign(spin) * s : Math.sign(spin) * s;
+      }
+      rot += spin * dt;
+
+      if (flying) {
+        flying.y -= view.h * 3.2 * dt;
+        if (flying.y <= LY() + LR()) {
+          const a = hitAngle();
+          flying = null;
+          if (stuck.some(s => near(s, a, 0.2))) {
+            falling = { y: LY() + LR(), vy: -view.h * 0.4, r: 0 };
+            return fail();
+          }
+          stuck.push(a);
+          left--;
+          score++;
+          shake = 0.1;
+          const ai = apples.findIndex(p => near(p, a, 0.3));
+          if (ai >= 0) { apples.splice(ai, 1); score += 3; }
+          updateHud();
+          if (left === 0) {
+            state = 'clear';
+            setTimeout(() => { stage++; buildStage(); state = 'play'; }, 700);
+          }
+        }
+      }
+    }
+
+    function fail() {
+      state = 'over';
+      const best = W.best('knife', score);
+      setTimeout(() => W.overlay({ title: 'Clang!', big: score, text: `Stage ${stage} · best ${best}`, button: 'Again', onStart: start }), 800);
+    }
+
+    function drawKnife(len) {
+      // Drawn pointing up with the tip at (0,0).
+      const bw = len * 0.09;
+      ctx.fillStyle = '#d1d1d6';
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(bw, len * 0.15); ctx.lineTo(bw, len * 0.55); ctx.lineTo(-bw, len * 0.55); ctx.lineTo(-bw, len * 0.15); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#5a3a1e';
+      ctx.fillRect(-bw * 1.2, len * 0.55, bw * 2.4, len * 0.45);
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#1a1024';
+      ctx.fillRect(0, 0, w, h);
+      const lr = LR(), ly = LY(), kl = KL();
+      shake = Math.max(0, shake - dt);
+
+      ctx.save();
+      ctx.translate(w / 2, ly - shake * 30);
+      ctx.rotate(rot);
+      // Stuck knives (behind the log).
+      for (const a of stuck) {
+        ctx.save();
+        ctx.rotate(a - Math.PI / 2);
+        ctx.translate(0, lr * 0.85);
+        drawKnife(kl);
+        ctx.restore();
+      }
+      ctx.font = `${Math.round(lr * 0.45)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const a of apples) ctx.fillText('🍎', Math.cos(a) * lr * 1.12, Math.sin(a) * lr * 1.12);
+      ctx.fillStyle = '#a0703c';
+      ctx.beginPath(); ctx.arc(0, 0, lr, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#7a5028';
+      ctx.lineWidth = 2;
+      for (const k of [0.7, 0.45, 0.2]) { ctx.beginPath(); ctx.arc(0, 0, lr * k, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.restore();
+
+      if (flying) { ctx.save(); ctx.translate(w / 2, flying.y); drawKnife(kl); ctx.restore(); }
+      else if (state === 'play' && left > 0) { ctx.save(); ctx.translate(w / 2, h - kl * 1.1); drawKnife(kl); ctx.restore(); }
+      if (falling) {
+        falling.vy += h * 3 * dt; falling.y += falling.vy * dt; falling.r += 8 * dt;
+        ctx.save(); ctx.translate(w / 2 + falling.r * 6, falling.y); ctx.rotate(falling.r); drawKnife(kl); ctx.restore();
+      }
+
+      // Remaining knives indicator.
+      for (let i = 0; i < left - (flying ? 0 : 0); i++) {
+        ctx.fillStyle = '#ffffff99';
+        ctx.fillRect(8, h - 12 - i * 9, 4, 7);
+      }
+    }
+
+    W.pointer(canvas, { down: throwKnife });
+    window.addEventListener('keydown', e => { if (e.key === ' ') throwKnife(); });
+
+    function start() { stage = 1; score = 0; buildStage(); state = 'play'; }
+
+    stage = 1; score = 0; buildStage();
+    W.overlay({ title: '🔪 Knife Hit', text: 'Tap to throw.<br>Don\'t hit the other knives!', onStart: start });
+    W.loop(dt => { if (state === 'play' || state === 'clear') update(dt); render(dt); });
+  </script>
+</body>
+</html>
