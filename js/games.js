@@ -67,3 +67,15 @@ window.GAMES = [
   { id: 'catch', name: 'Catch', emoji: '🧺', color: '#457b9d', desc: 'Crown moves the basket' },
   { id: 'cookie', name: 'Cookie Clicker', emoji: '🍪', color: '#c48a50', desc: 'Tap or spin the Crown to bake' },
 ];
+
+// Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
+window.CATEGORIES = {
+  Arcade: ['snakeio', 'blobio', 'flappy', 'stack', 'dino', 'knife', 'colorswitch', 'invaders', 'fruit', 'dodge', 'cave', 'hop',
+    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles'],
+  Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker'],
+  Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman'],
+  Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps'],
+  Sports: ['golf', 'hoops', 'bowling', 'darts'],
+  Fun: ['eightball', 'slots', 'cookie', 'plinko'],
+};
+window.CROWN = ['snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];
