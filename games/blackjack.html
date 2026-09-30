@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Blackjack</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    body.game { background: #0b3d1f; }
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 32px 6px max(6px, env(safe-area-inset-bottom)); gap: 4px; }
+    .row { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 0; }
+    .label { font-size: 10px; color: #a7d7b5; }
+    .hand { display: flex; gap: 3px; flex-wrap: nowrap; overflow: hidden; }
+    .card {
+      width: 28px; height: 40px; flex: none; border-radius: 4px; background: #fff; color: #000;
+      font-weight: 800; font-size: 13px; line-height: 1; padding: 3px; display: flex; flex-direction: column; justify-content: space-between;
+      animation: deal 0.2s ease-out;
+    }
+    .card.red { color: #d70015; }
+    .card.down { background: repeating-linear-gradient(45deg, #0a84ff, #0a84ff 3px, #0060c0 3px, #0060c0 6px); }
+    @keyframes deal { from { transform: translateY(-10px); opacity: 0; } }
+    #msg { text-align: center; font-size: 14px; font-weight: 700; min-height: 18px; }
+    #btns { display: flex; gap: 4px; }
+    #btns button { flex: 1; border: 0; border-radius: 16px; padding: 8px 0; font: inherit; font-size: 13px; font-weight: 700; background: #fff; color: #000; }
+    #btns button:disabled { opacity: 0.3; }
+    #btns .go { background: #ffd60a; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div class="row"><div class="label" id="dl">Dealer</div><div class="hand" id="dealer"></div></div>
+    <div id="msg"></div>
+    <div class="row"><div class="label" id="pl">You</div><div class="hand" id="player"></div></div>
+    <div id="btns"></div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const SUITS = ['♠', '♥', '♦', '♣'];
+    const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+    const $ = id => document.getElementById(id);
+    let deck, player, dealer, chips = 100, bet, phase;
+
+    function newDeck() {
+      deck = [];
+      for (let d = 0; d < 2; d++) for (const s of SUITS) for (const r of RANKS) deck.push({ r, s });
+      deck.sort(() => Math.random() - 0.5);
+    }
+    const draw = () => { if (deck.length < 15) newDeck(); return deck.pop(); };
+    function total(hand) {
+      let t = 0, aces = 0;
+      for (const c of hand) {
+        if (c.r === 'A') { aces++; t += 11; } else t += ['J', 'Q', 'K'].includes(c.r) ? 10 : Number(c.r);
+      }
+      while (t > 21 && aces) { t -= 10; aces--; }
+      return t;
+    }
+
+    function cardEl(c, down) {
+      const d = document.createElement('div');
+      d.className = 'card' + (down ? ' down' : c.s === '♥' || c.s === '♦' ? ' red' : '');
+      if (!down) d.innerHTML = `<span>${c.r}</span><span style="align-self:flex-end">${c.s}</span>`;
+      return d;
+    }
+
+    function render() {
+      const hide = phase === 'play';
+      $('dealer').innerHTML = '';
+      dealer.forEach((c, i) => $('dealer').appendChild(cardEl(c, hide && i === 1)));
+      $('player').innerHTML = '';
+      player.forEach(c => $('player').appendChild(cardEl(c)));
+      $('dl').textContent = 'Dealer' + (hide ? '' : ' · ' + total(dealer));
+      $('pl').textContent = `You · ${total(player)} · bet ${bet}`;
+      $('hud').innerHTML = `${chips}<small>chips</small>`;
+      const b = $('btns');
+      b.innerHTML = '';
+      const btn = (label, fn, cls, dis) => {
+        const e = document.createElement('button');
+        e.textContent = label;
+        if (cls) e.className = cls;
+        e.disabled = !!dis;
+        e.addEventListener('click', fn);
+        b.appendChild(e);
+      };
+      if (phase === 'play') {
+        btn('Hit', hit);
+        btn('Stand', stand);
+        btn('×2', double, '', player.length > 2 || chips < bet);
+      } else {
+        btn(chips > 0 ? 'Deal (10)' : 'New game', deal, 'go');
+      }
+    }
+
+    function deal() {
+      if (chips <= 0) chips = 100;
+      bet = Math.min(10, chips);
+      chips -= bet;
+      player = [draw(), draw()];
+      dealer = [draw(), draw()];
+      phase = 'play';
+      $('msg').textContent = '';
+      if (total(player) === 21) return finish();
+      render();
+    }
+
+    function hit() {
+      player.push(draw());
+      if (total(player) >= 21) return stand();
+      render();
+    }
+
+    function double() {
+      chips -= bet;
+      bet *= 2;
+      player.push(draw());
+      stand();
+    }
+
+    function stand() {
+      if (total(player) <= 21) while (total(dealer) < 17) dealer.push(draw());
+      finish();
+    }
+
+    function finish() {
+      phase = 'done';
+      const p = total(player), d = total(dealer);
+      const bj = p === 21 && player.length === 2;
+      let msg;
+      if (p > 21) msg = 'Bust 💥';
+      else if (bj && !(d === 21 && dealer.length === 2)) { msg = 'Blackjack! 🎉'; chips += Math.floor(bet * 2.5); }
+      else if (d > 21 || p > d) { msg = 'You win! 🎉'; chips += bet * 2; }
+      else if (p === d) { msg = 'Push'; chips += bet; }
+      else msg = 'Dealer wins';
+      $('msg').textContent = msg;
+      W.best('blackjack', chips);
+      render();
+    }
+
+    newDeck();
+    player = []; dealer = []; bet = 0; phase = 'done';
+    render();
+  </script>
+</body>
+</html>
