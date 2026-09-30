@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Blob.io</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+
+    const WORLD = 1400;
+    const MAX_PELLETS = 500;
+    const AI_COUNT = 11;
+    const COLORS = ['#ff453a', '#ff9f0a', '#ffd60a', '#64d2ff', '#0a84ff', '#bf5af2', '#ff375f', '#ac8e68', '#5e5ce6', '#66d4cf'];
+    const NAMES = ['Mochi', 'Bubbles', 'Goo', 'Jelly', 'Blorp', 'Pudding', 'Squish', 'Dot', 'Boba', 'Gumdrop', 'Zorp', 'Wobble'];
+
+    let blobs, pellets, player, running = false, steer = null, respawns;
+
+    const radius = m => Math.sqrt(m) * 4;
+    const speedOf = m => 150 / Math.pow(m, 0.22);
+
+    function makeBlob(x, y, mass, color, ai, name) {
+      return { x, y, mass, color, ai, name, vx: 0, vy: 0, dir: Math.random() * Math.PI * 2, thinkT: 0, alive: true };
+    }
+
+    function addPellet() {
+      pellets.push({ x: W.rand(10, WORLD - 10), y: W.rand(10, WORLD - 10), color: W.pick(COLORS) });
+    }
+
+    function spawnAI() {
+      let x, y;
+      for (let i = 0; i < 20; i++) {
+        x = W.rand(80, WORLD - 80); y = W.rand(80, WORLD - 80);
+        if (!player || Math.hypot(x - player.x, y - player.y) > 300) break;
+      }
+      blobs.push(makeBlob(x, y, W.rand(8, 70), W.pick(COLORS), true, W.pick(NAMES)));
+    }
+
+    function reset() {
+      blobs = [];
+      pellets = [];
+      respawns = [];
+      player = makeBlob(WORLD / 2, WORLD / 2, 12, '#30d158', false, 'You');
+      blobs.push(player);
+      for (let i = 0; i < AI_COUNT; i++) spawnAI();
+      for (let i = 0; i < MAX_PELLETS; i++) addPellet();
+    }
+
+    function think(b) {
+      const r = radius(b.mass);
+      let threat = null, prey = null, td = Infinity, pd = Infinity;
+      for (const o of blobs) {
+        if (o === b || !o.alive) continue;
+        const d = Math.hypot(o.x - b.x, o.y - b.y);
+        if (o.mass > b.mass * 1.15 && d < 160 + radius(o.mass) && d < td) { td = d; threat = o; }
+        if (b.mass > o.mass * 1.15 && d < 200 + r && d < pd) { pd = d; prey = o; }
+      }
+      if (threat) b.dir = Math.atan2(b.y - threat.y, b.x - threat.x) + W.rand(-0.3, 0.3);
+      else if (prey) b.dir = Math.atan2(prey.y - b.y, prey.x - b.x);
+      else {
+        let best = null, bd = 220;
+        for (const p of pellets) {
+          const d = Math.hypot(p.x - b.x, p.y - b.y);
+          if (d < bd) { bd = d; best = p; }
+        }
+        b.dir = best ? Math.atan2(best.y - b.y, best.x - b.x) : b.dir + W.rand(-0.5, 0.5);
+      }
+    }
+
+    function update(dt) {
+      for (const b of blobs) {
+        if (!b.alive) continue;
+        let tx = 0, ty = 0;
+        if (b.ai) {
+          b.thinkT -= dt;
+          if (b.thinkT <= 0) { think(b); b.thinkT = W.rand(0.15, 0.4); }
+          tx = Math.cos(b.dir); ty = Math.sin(b.dir);
+        } else if (steer) {
+          tx = steer.x; ty = steer.y;
+        }
+        const sp = speedOf(b.mass);
+        // Ease velocity toward the desired direction for a floaty feel.
+        b.vx += (tx * sp - b.vx) * Math.min(1, dt * 5);
+        b.vy += (ty * sp - b.vy) * Math.min(1, dt * 5);
+        const r = radius(b.mass);
+        b.x = W.clamp(b.x + b.vx * dt, r * 0.5, WORLD - r * 0.5);
+        b.y = W.clamp(b.y + b.vy * dt, r * 0.5, WORLD - r * 0.5);
+
+        // Big blobs slowly lose mass so nobody grows forever.
+        if (b.mass > 50) b.mass -= b.mass * 0.004 * dt;
+
+        for (let i = pellets.length - 1; i >= 0; i--) {
+          const p = pellets[i];
+          if (Math.abs(p.x - b.x) < r && Math.abs(p.y - b.y) < r && Math.hypot(p.x - b.x, p.y - b.y) < r) {
+            b.mass += 1;
+            pellets.splice(i, 1);
+          }
+        }
+      }
+
+      // Eating: a blob swallows another if it's 15% heavier and covers its centre.
+      for (const a of blobs) {
+        if (!a.alive) continue;
+        for (const b of blobs) {
+          if (a === b || !b.alive || a.mass < b.mass * 1.15) continue;
+          if (Math.hypot(a.x - b.x, a.y - b.y) < radius(a.mass) - radius(b.mass) * 0.4) {
+            a.mass += b.mass * 0.8;
+            b.alive = false;
+            if (b === player) gameOver(a);
+            else respawns.push(W.rand(1.5, 4));
+          }
+        }
+      }
+      blobs = blobs.filter(b => b.alive || b === player);
+
+      for (let i = respawns.length - 1; i >= 0; i--) {
+        respawns[i] -= dt;
+        if (respawns[i] <= 0) { respawns.splice(i, 1); spawnAI(); }
+      }
+      while (pellets.length < MAX_PELLETS) addPellet();
+    }
+
+    let cam = { x: WORLD / 2, y: WORLD / 2, z: 1 };
+
+    function render() {
+      const { w, h } = view;
+      const targetZ = Math.min(w, h) / (180 + radius(player.mass) * 7);
+      cam.z += (targetZ - cam.z) * 0.06;
+      if (player.alive) { cam.x += (player.x - cam.x) * 0.3; cam.y += (player.y - cam.y) * 0.3; }
+      const hw = w / 2 / cam.z, hh = h / 2 / cam.z;
+
+      ctx.fillStyle = '#0d0d12';
+      ctx.fillRect(0, 0, w, h);
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+      ctx.scale(cam.z, cam.z);
+      ctx.translate(-cam.x, -cam.y);
+
+      ctx.fillStyle = '#16161e';
+      ctx.fillRect(0, 0, WORLD, WORLD);
+      ctx.strokeStyle = '#22222c';
+      ctx.lineWidth = 1 / cam.z;
+      ctx.beginPath();
+      const G = 40;
+      for (let x = Math.max(0, Math.floor((cam.x - hw) / G) * G); x < Math.min(WORLD, cam.x + hw); x += G) { ctx.moveTo(x, Math.max(0, cam.y - hh)); ctx.lineTo(x, Math.min(WORLD, cam.y + hh)); }
+      for (let y = Math.max(0, Math.floor((cam.y - hh) / G) * G); y < Math.min(WORLD, cam.y + hh); y += G) { ctx.moveTo(Math.max(0, cam.x - hw), y); ctx.lineTo(Math.min(WORLD, cam.x + hw), y); }
+      ctx.stroke();
+
+      for (const p of pellets) {
+        if (Math.abs(p.x - cam.x) > hw + 4 || Math.abs(p.y - cam.y) > hh + 4) continue;
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // Smaller blobs draw first so bigger ones appear on top.
+      const sorted = blobs.filter(b => b.alive).sort((a, b) => a.mass - b.mass);
+      for (const b of sorted) {
+        const r = radius(b.mass);
+        if (Math.abs(b.x - cam.x) > hw + r || Math.abs(b.y - cam.y) > hh + r) continue;
+        ctx.fillStyle = b.color;
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = Math.max(2, r * 0.08);
+        ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        const fs = Math.max(6, r * 0.45);
+        if (fs * cam.z > 5) {
+          ctx.fillStyle = '#fff';
+          ctx.font = `700 ${fs}px -apple-system, system-ui`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(b.name, b.x, b.y);
+        }
+      }
+      ctx.restore();
+
+      const alive = blobs.filter(b => b.alive).sort((a, b) => b.mass - a.mass);
+      const rank = alive.indexOf(player) + 1;
+      hud.innerHTML = `${Math.floor(player.mass)}` + (rank ? `<small>#${rank} of ${alive.length}</small>` : '');
+    }
+
+    // Steering: direction from the screen centre to your finger. Closer = slower.
+    function setSteer(p) {
+      const dx = p.x - view.w / 2, dy = p.y - view.h / 2;
+      const d = Math.hypot(dx, dy);
+      const full = Math.min(view.w, view.h) * 0.3;
+      steer = d < 4 ? null : { x: (dx / d) * Math.min(1, d / full), y: (dy / d) * Math.min(1, d / full) };
+    }
+    W.pointer(canvas, { down: setSteer, move: setSteer, hover: true });
+    const keys = {};
+    window.addEventListener('keydown', e => { keys[e.key] = true; keySteer(); });
+    window.addEventListener('keyup', e => { keys[e.key] = false; keySteer(); });
+    function keySteer() {
+      const x = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
+      const y = (keys.ArrowDown ? 1 : 0) - (keys.ArrowUp ? 1 : 0);
+      if (x || y) steer = { x: x / Math.hypot(x, y), y: y / Math.hypot(x, y) };
+    }
+
+    function start() {
+      reset();
+      steer = null;
+      running = true;
+    }
+
+    function gameOver(by) {
+      running = false;
+      const score = Math.floor(player.mass);
+      const best = W.best('blobio', score);
+      setTimeout(() => W.overlay({ title: 'Eaten!', big: score, text: `Swallowed by ${by.name}<br>Best ${best}`, button: 'Again', onStart: start }), 700);
+    }
+
+    reset();
+    W.overlay({ title: '🟢 Blob.io', text: 'Touch to steer.<br>Eat smaller blobs,<br>run from bigger ones!', onStart: start });
+
+    W.loop(dt => {
+      if (running) update(dt);
+      render();
+    });
+  </script>
+</body>
+</html>
