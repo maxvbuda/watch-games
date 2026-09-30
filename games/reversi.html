@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Reversi</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const N = 8;
+    let cell, ox, oy;
+    const view = W.setupCanvas(canvas, (w, h) => {
+      cell = Math.floor(Math.min(w - 4, h - 36) / N);
+      ox = Math.floor((w - cell * N) / 2);
+      oy = h - cell * N - 3;
+    });
+    const ctx = view.ctx;
+    const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+    // Positional weights: corners great, squares next to corners bad.
+    const WEIGHT = [
+      [100, -20, 10, 5, 5, 10, -20, 100], [-20, -50, -2, -2, -2, -2, -50, -20], [10, -2, 1, 1, 1, 1, -2, 10], [5, -2, 1, 0, 0, 1, -2, 5],
+      [5, -2, 1, 0, 0, 1, -2, 5], [10, -2, 1, 1, 1, 1, -2, 10], [-20, -50, -2, -2, -2, -2, -50, -20], [100, -20, 10, 5, 5, 10, -20, 100],
+    ];
+
+    let b, turn, busy, over, lastMove, tally = { w: 0, l: 0 };
+
+    function flips(bd, x, y, p) {
+      if (bd[y][x]) return [];
+      const out = [];
+      for (const [dx, dy] of DIRS) {
+        const line = [];
+        let cx = x + dx, cy = y + dy;
+        while (cx >= 0 && cy >= 0 && cx < N && cy < N && bd[cy][cx] === 3 - p) { line.push([cx, cy]); cx += dx; cy += dy; }
+        if (line.length && cx >= 0 && cy >= 0 && cx < N && cy < N && bd[cy][cx] === p) out.push(...line);
+      }
+      return out;
+    }
+    function moves(bd, p) {
+      const m = [];
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const f = flips(bd, x, y, p); if (f.length) m.push({ x, y, f }); }
+      return m;
+    }
+    function apply(bd, m, p) { bd[m.y][m.x] = p; for (const [x, y] of m.f) bd[y][x] = p; }
+    const count = p => b.flat().filter(v => v === p).length;
+
+    function aiMove() {
+      const ms = moves(b, 2);
+      let best = null, bestScore = -Infinity;
+      for (const m of ms) {
+        // Score: square weight + flips, minus the opponent's best reply weight.
+        const copy = b.map(r => [...r]);
+        apply(copy, m, 2);
+        const reply = moves(copy, 1).reduce((mx, r) => Math.max(mx, WEIGHT[r.y][r.x]), -100);
+        const s = WEIGHT[m.y][m.x] + m.f.length * 0.8 - reply * 0.6 + Math.random();
+        if (s > bestScore) { bestScore = s; best = m; }
+      }
+      return best;
+    }
+
+    function nextTurn() {
+      updateHud();
+      const mine = moves(b, 1), theirs = moves(b, 2);
+      if (!mine.length && !theirs.length) return finish();
+      if (turn === 1 && !mine.length) turn = 2;
+      else if (turn === 2 && !theirs.length) turn = 1;
+      if (turn === 2) {
+        busy = true;
+        setTimeout(() => {
+          const m = aiMove();
+          apply(b, m, 2);
+          lastMove = m;
+          turn = 1; busy = false;
+          nextTurn();
+        }, 450);
+      }
+    }
+
+    function finish() {
+      over = true;
+      const me = count(1), ai = count(2);
+      if (me > ai) { tally.w++; W.best('reversi', tally.w); } else if (ai > me) tally.l++;
+      updateHud();
+      setTimeout(() => W.overlay({ title: me > ai ? 'You win! 🎉' : me < ai ? 'Watch wins 🤖' : 'Draw', big: `${me}–${ai}`, text: `Session ${tally.w}–${tally.l}`, button: 'Again', onStart: start }), 700);
+    }
+
+    function tap(p) {
+      if (over || busy || turn !== 1) return;
+      const x = Math.floor((p.x - ox) / cell), y = Math.floor((p.y - oy) / cell);
+      if (x < 0 || y < 0 || x >= N || y >= N) return;
+      const f = flips(b, x, y, 1);
+      if (!f.length) return;
+      apply(b, { x, y, f }, 1);
+      lastMove = { x, y };
+      turn = 2;
+      nextTurn();
+    }
+
+    function updateHud() { hud.innerHTML = `⚫${count(1)} ⚪${count(2)}<small>${over ? '' : turn === 1 ? 'your turn' : 'thinking…'}</small>`; }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#1f7a3a';
+      ctx.fillRect(ox, oy, cell * N, cell * N);
+      ctx.strokeStyle = '#0d4d22'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i <= N; i++) { ctx.moveTo(ox + i * cell, oy); ctx.lineTo(ox + i * cell, oy + N * cell); ctx.moveTo(ox, oy + i * cell); ctx.lineTo(ox + N * cell, oy + i * cell); }
+      ctx.stroke();
+      const hints = turn === 1 && !busy && !over ? moves(b, 1) : [];
+      for (const m of hints) { ctx.fillStyle = '#ffffff33'; ctx.beginPath(); ctx.arc(ox + (m.x + 0.5) * cell, oy + (m.y + 0.5) * cell, cell * 0.14, 0, Math.PI * 2); ctx.fill(); }
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        if (!b[y][x]) continue;
+        ctx.fillStyle = b[y][x] === 1 ? '#111' : '#f2f2f7';
+        ctx.beginPath(); ctx.arc(ox + (x + 0.5) * cell, oy + (y + 0.5) * cell, cell * 0.4, 0, Math.PI * 2); ctx.fill();
+      }
+      if (lastMove) { ctx.strokeStyle = '#ffd60a'; ctx.lineWidth = 1.5; ctx.strokeRect(ox + lastMove.x * cell + 1, oy + lastMove.y * cell + 1, cell - 2, cell - 2); }
+    }
+
+    W.pointer(canvas, { down: tap });
+    function start() {
+      b = Array.from({ length: N }, () => new Array(N).fill(0));
+      b[3][3] = b[4][4] = 2; b[3][4] = b[4][3] = 1;
+      turn = 1; busy = false; over = false; lastMove = null;
+      updateHud();
+    }
+    start();
+    W.loop(render);
+  </script>
+</body>
+</html>
