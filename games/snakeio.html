@@ -390,7 +390,7 @@
     }
 
     // Digital Crown: every pixel scrolled turns the snake. Scroll down = clockwise.
-    const CROWN_TURN = 0.016;  // radians per scrolled pixel (~1 crown turn ≈ 1 snake turn)
+    const CROWN_TURN = 0.006;  // radians per scrolled pixel (~2.5 crown turns ≈ 1 snake turn)
     const MID = 100000;
     let lastScroll = MID;
     window.scrollTo(0, MID);
@@ -400,7 +400,7 @@
       lastScroll = y;
       if (running && delta) {
         // Keep the target within reach of the current heading so fast spins don't wrap around.
-        const diff = W.clamp(angleDiff(player.angle, targetAngle) + delta * CROWN_TURN, -2.5, 2.5);
+        const diff = W.clamp(angleDiff(player.angle, targetAngle) + delta * CROWN_TURN, -1.2, 1.2);
         targetAngle = player.angle + diff;
       }
       // Recentre long before hitting either end of the spacer.
