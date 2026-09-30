@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Pipes</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // Bits: 1 up, 2 right, 4 down, 8 left.
+    const DIRS = [[0, -1, 1, 4], [1, 0, 2, 8], [0, 1, 4, 1], [-1, 0, 8, 2]];
+    let N = 5, tiles, anim, moves, level = 1, done, lit;
+
+    const rot = m => ((m << 1) | (m >> 3)) & 15;
+
+    function generate() {
+      N = Math.min(4 + Math.ceil(level / 2), 7);
+      const m = new Array(N * N).fill(0), seen = new Array(N * N).fill(false);
+      const start = Math.floor(N * N / 2);
+      const stack = [start]; seen[start] = true;
+      // Random spanning tree from the centre (source).
+      while (stack.length) {
+        const i = stack[stack.length - 1], x = i % N, y = Math.floor(i / N);
+        const opts = DIRS.filter(([dx, dy]) => { const nx = x + dx, ny = y + dy; return nx >= 0 && ny >= 0 && nx < N && ny < N && !seen[ny * N + nx]; });
+        // Keep branches short-ish so tiles aren't all straight lines.
+        if (!opts.length || (stack.length > 3 && Math.random() < 0.2)) { stack.pop(); continue; }
+        const [dx, dy, bit, back] = W.pick(opts);
+        const j = (y + dy) * N + x + dx;
+        m[i] |= bit; m[j] |= back; seen[j] = true; stack.push(j);
+        if (seen.every(Boolean)) break;
+      }
+      // Any unvisited cells (from early pops) get attached to a visited neighbour.
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (let i = 0; i < N * N; i++) if (!seen[i]) {
+          const x = i % N, y = Math.floor(i / N);
+          for (const [dx, dy, bit, back] of DIRS) {
+            const nx = x + dx, ny = y + dy, j = ny * N + nx;
+            if (nx >= 0 && ny >= 0 && nx < N && ny < N && seen[j]) { m[i] |= bit; m[j] |= back; seen[i] = true; changed = true; break; }
+          }
+        }
+      }
+      tiles = m.map(v => { let t = v; for (let k = W.randInt(0, 3); k > 0; k--) t = rot(t); return t; });
+      anim = new Array(N * N).fill(0);
+      moves = 0; done = false;
+      computeLit();
+      updateHud();
+    }
+
+    // Flood from the source through mutually-connected pipes.
+    function computeLit() {
+      const src = Math.floor(N * N / 2);
+      lit = new Set([src]);
+      const stack = [src];
+      while (stack.length) {
+        const i = stack.pop(), x = i % N, y = Math.floor(i / N);
+        for (const [dx, dy, bit, back] of DIRS) {
+          const nx = x + dx, ny = y + dy, j = ny * N + nx;
+          if (nx >= 0 && ny >= 0 && nx < N && ny < N && (tiles[i] & bit) && (tiles[j] & back) && !lit.has(j)) { lit.add(j); stack.push(j); }
+        }
+      }
+    }
+
+    function solved() {
+      if (lit.size !== N * N) return false;
+      // No pipe may point off the board or at a neighbour that doesn't point back.
+      for (let i = 0; i < N * N; i++) {
+        const x = i % N, y = Math.floor(i / N);
+        for (const [dx, dy, bit, back] of DIRS) {
+          if (!(tiles[i] & bit)) continue;
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= N || ny >= N || !(tiles[ny * N + nx] & back)) return false;
+        }
+      }
+      return true;
+    }
+
+    function updateHud() { hud.innerHTML = `L${level}<small>${moves} turns</small>`; }
+
+    function layout() {
+      const size = Math.min(view.w - 8, view.h - 36);
+      return { cs: size / N, ox: (view.w - size) / 2, oy: view.h - size - 4 };
+    }
+
+    function tap(p) {
+      if (done) return;
+      const { cs, ox, oy } = layout();
+      const x = Math.floor((p.x - ox) / cs), y = Math.floor((p.y - oy) / cs);
+      if (x < 0 || y < 0 || x >= N || y >= N) return;
+      const i = y * N + x;
+      tiles[i] = rot(tiles[i]);
+      anim[i] = -Math.PI / 2;   // animate the quarter turn
+      moves++;
+      computeLit();
+      updateHud();
+      if (solved()) {
+        done = true;
+        W.best('pipes', level);
+        setTimeout(() => W.overlay({ title: 'All connected! 💧', big: moves + ' turns', text: `Level ${level}`, button: 'Next level', onStart: () => { level++; generate(); } }), 500);
+      }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      if (!tiles) return;
+      const { cs, ox, oy } = layout();
+      const src = Math.floor(N * N / 2);
+      for (let i = 0; i < N * N; i++) {
+        const x = i % N, y = Math.floor(i / N), cx = ox + (x + 0.5) * cs, cy = oy + (y + 0.5) * cs;
+        ctx.fillStyle = '#1c1c1e';
+        ctx.fillRect(ox + x * cs + 1, oy + y * cs + 1, cs - 2, cs - 2);
+        anim[i] = Math.min(0, anim[i] + dt * 14);
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(anim[i]);
+        ctx.strokeStyle = lit.has(i) ? (done ? '#30d158' : '#64d2ff') : '#636366';
+        ctx.lineWidth = cs * 0.22;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (const [dx, dy, bit] of DIRS) if (tiles[i] & bit) { ctx.moveTo(0, 0); ctx.lineTo(dx * cs / 2, dy * cs / 2); }
+        ctx.stroke();
+        // Single-exit tiles are "houses" that need water.
+        const exits = [1, 2, 4, 8].filter(b => tiles[i] & b).length;
+        if (i === src) { ctx.fillStyle = '#0a84ff'; ctx.beginPath(); ctx.arc(0, 0, cs * 0.24, 0, Math.PI * 2); ctx.fill(); }
+        else if (exits === 1) { ctx.fillStyle = lit.has(i) ? '#64d2ff' : '#48484a'; ctx.fillRect(-cs * 0.18, -cs * 0.18, cs * 0.36, cs * 0.36); }
+        ctx.restore();
+      }
+    }
+
+    W.pointer(canvas, { down: tap });
+    generate();
+    W.overlay({ title: '🚰 Pipes', text: 'Tap tiles to rotate them.<br>Connect every pipe to the<br>blue source — no leaks!', onStart() {} });
+    W.loop(render);
+  </script>
+</body>
+</html>
