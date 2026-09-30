@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Word Guess</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 30px 4px max(4px, env(safe-area-inset-bottom)); gap: 4px; }
+    #top { flex: 1; display: flex; align-items: center; gap: 6px; min-height: 0; }
+    #man { font-size: 13px; line-height: 1; text-align: center; width: 44px; flex: none; }
+    #man div { transition: opacity 0.3s; }
+    #right { flex: 1; min-width: 0; }
+    #hint { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    #word { font-size: 18px; font-weight: 800; letter-spacing: 3px; word-break: break-all; font-variant-numeric: tabular-nums; }
+    #keys { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+    #keys button { border: 0; border-radius: 6px; background: #2c2c2e; color: #fff; font: inherit; font-size: 13px; font-weight: 700; padding: 4px 0; }
+    #keys button.hit { background: #30d158; color: #000; }
+    #keys button.miss { background: #1c1c1e; color: #48484a; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="top">
+      <div id="man"></div>
+      <div id="right"><div id="hint"></div><div id="word"></div></div>
+    </div>
+    <div id="keys"></div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const WORDS = {
+      animal: ['TIGER', 'PANDA', 'GIRAFFE', 'DOLPHIN', 'PENGUIN', 'KOALA', 'ZEBRA', 'OCTOPUS', 'CHEETAH', 'HAMSTER', 'LOBSTER', 'PARROT', 'RABBIT', 'TURTLE', 'WALRUS'],
+      food: ['PIZZA', 'BURRITO', 'PANCAKE', 'NOODLES', 'WAFFLE', 'PRETZEL', 'AVOCADO', 'CUPCAKE', 'SUSHI', 'TACO', 'MANGO', 'POPCORN', 'CHEESE', 'BAGEL'],
+      sport: ['SOCCER', 'TENNIS', 'HOCKEY', 'BOXING', 'SURFING', 'KARATE', 'ARCHERY', 'CYCLING', 'BOWLING', 'SKIING', 'CRICKET', 'ROWING'],
+      space: ['PLANET', 'COMET', 'GALAXY', 'ROCKET', 'ASTEROID', 'NEBULA', 'JUPITER', 'SATURN', 'ORBIT', 'METEOR', 'ECLIPSE'],
+      music: ['GUITAR', 'PIANO', 'VIOLIN', 'TRUMPET', 'DRUMS', 'RHYTHM', 'MELODY', 'BANJO', 'FLUTE', 'CHORUS'],
+    };
+    const MAX = 6;
+    const $ = id => document.getElementById(id);
+    let word, cat, guessed, misses, streak = 0, done;
+
+    // A snowman with a life bar; it melts when you run out of guesses.
+    function drawMan() {
+      $('man').innerHTML = `<div style="font-size:30px">${misses >= MAX ? '💧' : '⛄'}</div>` +
+        `<div style="margin-top:3px">${'❤️'.repeat(MAX - misses)}${'🖤'.repeat(misses)}</div>`;
+    }
+
+    function draw() {
+      $('word').textContent = [...word].map(c => (guessed.has(c) || done ? c : '_')).join('');
+      $('hint').textContent = cat;
+      drawMan();
+      $('hud').innerHTML = `${streak}<small>streak</small>`;
+    }
+
+    function guess(ch, btn) {
+      if (done || guessed.has(ch)) return;
+      guessed.add(ch);
+      const hit = word.includes(ch);
+      btn.className = hit ? 'hit' : 'miss';
+      if (!hit) misses++;
+      const won = [...word].every(c => guessed.has(c));
+      if (won || misses >= MAX) {
+        done = true;
+        if (won) { streak++; W.best('hangman', streak); } else streak = 0;
+        draw();
+        setTimeout(() => W.overlay({ title: won ? 'Got it! 🎉' : 'Melted! 💧', big: word, text: won ? `Streak ${streak}` : 'Streak reset', button: 'Next word', onStart: start }), 700);
+        return;
+      }
+      draw();
+    }
+
+    function start() {
+      cat = W.pick(Object.keys(WORDS));
+      word = W.pick(WORDS[cat]);
+      guessed = new Set();
+      misses = 0;
+      done = false;
+      $('keys').innerHTML = '';
+      for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') {
+        const b = document.createElement('button');
+        b.textContent = ch;
+        b.addEventListener('click', () => guess(ch, b));
+        $('keys').appendChild(b);
+      }
+      draw();
+    }
+
+    start();
+  </script>
+</body>
+</html>
