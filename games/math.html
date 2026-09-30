@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Math Blitz</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 34px 6px max(6px, env(safe-area-inset-bottom)); gap: 5px; }
+    #q { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; transition: color 0.15s; }
+    #q.ok { color: #30d158; }
+    #q.bad { color: #ff453a; }
+    #answers { flex: 1.3; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 5px; }
+    #answers button {
+      border: 0; border-radius: 12px; background: #2c2c2e; color: #fff;
+      font: inherit; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;
+    }
+    #answers button:active { background: #48484a; }
+    #timer { position: absolute; left: 38px; right: 60px; top: max(14px, env(safe-area-inset-top)); height: 5px; border-radius: 3px; background: #ffffff22; overflow: hidden; }
+    #bar { height: 100%; width: 100%; background: #0a84ff; }
+  </style>
+</head>
+<body class="game">
+  <div id="area">
+    <div id="q"></div>
+    <div id="answers"><button></button><button></button><button></button><button></button></div>
+  </div>
+  <div id="timer"><div id="bar"></div></div>
+  <div class="hud" id="hud">0</div>
+  <script src="../js/common.js"></script>
+  <script>
+    const MAX_TIME = 30;
+    const qEl = document.getElementById('q');
+    const bar = document.getElementById('bar');
+    const hud = document.getElementById('hud');
+    const btns = [...document.querySelectorAll('#answers button')];
+    let answer, score, timeLeft, playing = false;
+
+    function makeQuestion() {
+      // Difficulty grows with score.
+      const lvl = Math.min(score, 30);
+      const ops = lvl < 4 ? ['+', '−'] : lvl < 10 ? ['+', '−', '×'] : ['+', '−', '×', '÷'];
+      const op = W.pick(ops);
+      const big = 10 + lvl * 3;
+      let a, b;
+      if (op === '+') { a = W.randInt(1, big); b = W.randInt(1, big); answer = a + b; }
+      if (op === '−') { a = W.randInt(2, big); b = W.randInt(1, a); answer = a - b; }
+      if (op === '×') { a = W.randInt(2, 5 + Math.floor(lvl / 3)); b = W.randInt(2, 9); answer = a * b; }
+      if (op === '÷') { b = W.randInt(2, 9); answer = W.randInt(2, 9 + Math.floor(lvl / 5)); a = b * answer; }
+      qEl.textContent = `${a} ${op} ${b}`;
+
+      const opts = new Set([answer]);
+      while (opts.size < 4) {
+        const off = W.randInt(1, Math.max(3, Math.ceil(answer * 0.2))) * (Math.random() < 0.5 ? -1 : 1);
+        if (answer + off >= 0) opts.add(answer + off);
+      }
+      [...opts].sort(() => Math.random() - 0.5).forEach((v, i) => (btns[i].textContent = v));
+    }
+
+    function choose(i) {
+      if (!playing) return;
+      const right = Number(btns[i].textContent) === answer;
+      if (right) { score++; timeLeft = Math.min(MAX_TIME, timeLeft + 1); }
+      else timeLeft -= 3;
+      hud.textContent = score;
+      qEl.className = right ? 'ok' : 'bad';
+      setTimeout(() => (qEl.className = ''), 150);
+      makeQuestion();
+    }
+
+    btns.forEach((b, i) => {
+      b.addEventListener('touchstart', e => { e.preventDefault(); choose(i); }, { passive: false });
+      b.addEventListener('mousedown', () => choose(i));
+    });
+
+    function start() {
+      score = 0;
+      timeLeft = MAX_TIME;
+      hud.textContent = '0';
+      playing = true;
+      makeQuestion();
+    }
+
+    W.loop(dt => {
+      if (!playing) return;
+      timeLeft -= dt;
+      bar.style.width = Math.max(0, timeLeft / MAX_TIME * 100) + '%';
+      bar.style.background = timeLeft < 8 ? '#ff453a' : '#0a84ff';
+      if (timeLeft <= 0) {
+        playing = false;
+        const best = W.best('math', score);
+        W.overlay({ title: "Time's up!", big: score, text: `Best ${best}`, button: 'Again', onStart: start });
+      }
+    });
+
+    W.overlay({ title: '🧮 Math Blitz', text: 'Right: +1 sec. Wrong: −3 sec.<br>How many can you solve?', onStart: start });
+  </script>
+</body>
+</html>
