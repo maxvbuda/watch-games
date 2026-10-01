@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Memory Grid</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 28px; }
+    #grid { --size: min(96vw, calc(100vh - 34px)); width: var(--size); height: var(--size); display: grid; gap: 4px; }
+    .q { border-radius: 8px; background: #2c2c2e; transition: background 0.15s; }
+    .q.show { background: #0a84ff; }
+    .q.ok { background: #30d158; }
+    .q.bad { background: #ff453a; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="grid"></div></div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    // Squares light up briefly — tap all of them from memory. More squares each round.
+    const $ = id => document.getElementById(id);
+    let n, count, targets, hits, lives, round, input;
+    function next() {
+      n = count < 5 ? 3 : count < 8 ? 4 : count < 12 ? 5 : 6;
+      $('grid').style.gridTemplateColumns = `repeat(${n}, 1fr)`; $('grid').style.gridTemplateRows = `repeat(${n}, 1fr)`;
+      targets = new Set(W.shuffle([...Array(n * n).keys()]).slice(0, count)); hits = new Set(); input = false;
+      $('grid').innerHTML = '';
+      for (let i = 0; i < n * n; i++) {
+        const d = document.createElement('div');
+        d.className = 'q' + (targets.has(i) ? ' show' : '');
+        const tap = e => { e.preventDefault(); press(i, d); };
+        d.addEventListener('touchstart', tap, { passive: false });
+        d.addEventListener('mousedown', tap);
+        $('grid').appendChild(d);
+      }
+      $('hud').innerHTML = `${round}<small>${'❤️'.repeat(lives)}</small>`;
+      setTimeout(() => { [...$('grid').children].forEach(d => d.classList.remove('show')); input = true; }, 900 + count * 120);
+    }
+    function press(i, d) {
+      if (!input || hits.has(i)) return;
+      if (targets.has(i)) {
+        hits.add(i); d.className = 'q ok';
+        if (hits.size === targets.size) { input = false; round++; count++; W.best('memorygrid', round); setTimeout(next, 500); }
+      } else {
+        d.className = 'q bad'; input = false; lives--;
+        [...$('grid').children].forEach((e, k) => { if (targets.has(k) && !hits.has(k)) e.className = 'q show'; });
+        if (lives <= 0) setTimeout(() => W.overlay({ title: 'Out of lives', big: round, text: `rounds · best ${W.best('memorygrid')}`, button: 'Again', onStart: start }), 800);
+        else setTimeout(next, 1100);
+      }
+    }
+    function start() { count = 3; lives = 3; round = 0; next(); }
+    W.overlay({ title: '🟦 Memory Grid', text: 'Squares flash blue — tap them<br>all from memory. It gets<br>bigger every round!', onStart: start });
+  </script>
+</body>
+</html>
