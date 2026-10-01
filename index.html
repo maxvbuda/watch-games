@@ -17,10 +17,13 @@
   </main>
   <script src="js/common.js"></script>
   <script src="js/games.js"></script>
+  <script src="js/packs.js"></script>
   <script>
     const list = document.getElementById('list');
     const chips = document.getElementById('chips');
-    const FILTERS = ['All', '⌚ Crown', ...Object.keys(CATEGORIES)];
+    const FILTERS = ['All', '📦 Packs', '⌚ Crown', ...Object.keys(CATEGORIES)];
+    const packList = Object.values(PACKS);
+    const levelCount = packList.reduce((a, p) => a + p.count, 0);
     let filter = 'All';
     try { filter = localStorage.getItem('wg.filter') || 'All'; } catch (e) {}
     if (!FILTERS.includes(filter)) filter = 'All';
@@ -44,8 +47,10 @@
         });
         chips.appendChild(b);
       }
-      const shown = GAMES.filter(matches);
-      document.getElementById('count').textContent = `${shown.length} of ${GAMES.length} games`;
+      const shown = filter === '📦 Packs' ? [] : GAMES.filter(matches);
+      const total = (GAMES.length + levelCount).toLocaleString();
+      document.getElementById('count').textContent = filter === 'All' ? `${total} games & levels`
+        : filter === '📦 Packs' ? `${levelCount.toLocaleString()} levels in ${packList.length} packs` : `${shown.length} games`;
       list.innerHTML = '';
       for (const g of shown) {
         const best = W.best(g.id);
@@ -57,6 +62,17 @@
           `<span><div class="name">${g.name}${CROWN.includes(g.id) ? ' <span class="crown" title="Digital Crown">⌚</span>' : ''}</div><div class="desc">${g.desc}</div>` +
           (best !== null ? `<div class="best">Best ${best}${g.unit || ''}</div>` : '') +
           `</span>`;
+        list.appendChild(a);
+      }
+      if (filter === 'All' || filter === '📦 Packs') for (const p of packList) {
+        let solved = 0;
+        for (let n = 1; n <= p.count; n++) if (W.isSolved(`${p.id}.${n}`)) solved++;
+        const a = document.createElement('a');
+        a.className = 'tile';
+        a.href = 'pack.html?id=' + p.id;
+        a.innerHTML = `<span class="ico" style="background:${p.color}33">${p.emoji}</span>` +
+          `<span><div class="name">${p.name}</div><div class="desc">${p.count} levels</div>` +
+          (solved ? `<div class="best">${solved} solved</div>` : '') + `</span>`;
         list.appendChild(a);
       }
     }

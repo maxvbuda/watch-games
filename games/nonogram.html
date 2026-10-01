@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="../css/watch.css">
   <style>
     #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 26px; }
-    #board { display: grid; gap: 2px; --c: min(calc((96vw - 44px) / 5), calc((100vh - 76px) / 5)); grid-template-columns: 40px repeat(5, var(--c)); grid-template-rows: 40px repeat(5, var(--c)); }
+    #board { display: grid; gap: 2px; --c: min(calc((96vw - 44px - var(--n) * 2px) / var(--n)), calc((100vh - 76px - var(--n) * 2px) / var(--n))); grid-template-columns: 40px repeat(var(--n), var(--c)); grid-template-rows: 40px repeat(var(--n), var(--c)); }
     .clue { font-size: 10px; font-weight: 700; color: #8e8e93; display: flex; align-items: flex-end; justify-content: center; line-height: 1.1; text-align: center; }
     .clue.row { justify-content: flex-end; align-items: center; padding-right: 4px; letter-spacing: 1px; }
     .clue.col { flex-direction: column; justify-content: flex-end; align-items: center; padding-bottom: 2px; }
@@ -22,8 +22,10 @@
   <div id="area"><div id="board"></div></div>
   <div class="hud" id="hud"></div>
   <script src="../js/common.js"></script>
+  <script src="../js/packs.js"></script>
   <script>
-    const N = 5;
+    const N = W.num('size', 5);
+    document.getElementById('board').style.setProperty('--n', N);
     const $ = id => document.getElementById(id);
     let sol, marks, done, solved = 0, startT;   // marks: 0 empty, 1 filled, 2 crossed
 
@@ -58,6 +60,7 @@
       if (ok) {
         done = true; solved++;
         const secs = Math.round((Date.now() - startT) / 1000);
+        if (W.packDone({ title: 'Solved! 🖼️', big: secs + 's' })) { marks.forEach((m, j) => $('c' + j).classList.toggle('won', m === 1)); return; }
         W.best('nonogram', solved);
         marks.forEach((m, j) => $('c' + j).classList.toggle('won', m === 1));
         setTimeout(() => W.overlay({ title: 'Solved! 🖼️', big: secs + 's', text: `${solved} solved this session`, button: 'Next puzzle', onStart: start }), 600);
@@ -75,14 +78,16 @@
     }
 
     function start() {
-      do sol = Array.from({ length: N * N }, () => (Math.random() < 0.58 ? 1 : 0));
+      W.packSeed();
+      do sol = Array.from({ length: N * N }, () => (W.rng() < 0.58 ? 1 : 0));
       while (sol.filter(Boolean).length < 9 || [...Array(N).keys()].some(k => !row(sol, k).some(Boolean)));
+      W.unseed();
       marks = new Array(N * N).fill(0);
       done = false; startT = Date.now();
       build(); draw();
     }
     start();
-    W.overlay({ title: '🖼️ Nonogram', text: 'Numbers show runs of filled<br>squares in each row/column.<br>Tap: fill → ✕ → clear.', onStart() {} });
+    W.overlay({ title: W.packTitle('🖼️ Nonogram'), text: 'Numbers show runs of filled<br>squares in each row/column.<br>Tap: fill → ✕ → clear.', onStart() {} });
   </script>
 </body>
 </html>

@@ -34,9 +34,10 @@
   </div>
   <div class="hud" id="hud"></div>
   <script src="../js/common.js"></script>
+  <script src="../js/packs.js"></script>
   <script>
-    const COLORS = ['#ff453a', '#ffd60a', '#30d158', '#0a84ff', '#bf5af2', '#ff9f0a'];
-    const LEN = 4, TRIES = 8;
+    const COLORS = ['#ff453a', '#ffd60a', '#30d158', '#0a84ff', '#bf5af2', '#ff9f0a', '#ffffff', '#ff6fb5'].slice(0, W.num('colors', 6));
+    const LEN = W.num('len', 4), TRIES = 8;
     const $ = id => document.getElementById(id);
     let secret, guess, history, done, streak = 0;
 
@@ -67,6 +68,7 @@
         done = true;
         const won = b === LEN;
         streak = won ? streak + 1 : 0;
+        if (won && W.packDone({ title: 'Cracked it! 🔓', big: history.length + ' tries' })) return;
         if (won) W.best('codebreaker', history.length, true);
         const reveal = secret.map(c => `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${COLORS[c]};margin:0 2px"></span>`).join('');
         setTimeout(() => W.overlay({ title: won ? 'Cracked it! 🔓' : 'Locked out 🔒', big: won ? history.length + ' tries' : undefined, text: `Code: ${reveal}`, button: 'New code', onStart: start }), 400);
@@ -87,9 +89,9 @@
       $('hud').innerHTML = `${history.length}/${TRIES}<small>tries</small>`;
     }
 
-    function start() { secret = Array.from({ length: LEN }, () => W.randInt(0, COLORS.length - 1)); guess = []; history = []; done = false; draw(); }
+    function start() { W.packSeed(); secret = Array.from({ length: LEN }, () => W.randInt(0, COLORS.length - 1)); W.unseed(); guess = []; history = []; done = false; draw(); }
     start();
-    W.overlay({ title: '🔐 Code Breaker', text: `Guess the 4-colour code<br>in ${TRIES} tries. 🟢 = right colour<br>& spot, ⚪ = right colour.`, onStart() {} });
+    W.overlay({ title: W.packTitle('🔐 Code Breaker'), text: `Guess the ${LEN}-colour code<br>in ${TRIES} tries. 🟢 = right colour<br>& spot, ⚪ = right colour.`, onStart() {} });
   </script>
 </body>
 </html>

@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="../css/watch.css">
   <style>
     #area { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 28px 4px max(4px, env(safe-area-inset-bottom)); gap: 5px; }
-    #grid { --size: min(96vw, calc(100vh - 70px)); width: var(--size); height: var(--size); display: grid; grid-template-columns: repeat(10, 1fr); border-radius: 6px; overflow: hidden; }
+    #grid { --size: min(96vw, calc(100vh - 70px)); width: var(--size); height: var(--size); display: grid; grid-template-columns: repeat(var(--n), 1fr); border-radius: 6px; overflow: hidden; }
     #grid div { transition: background 0.2s; }
     #pal { display: flex; gap: 4px; width: min(96vw, 260px); }
     #pal button { flex: 1; height: 30px; border: 0; border-radius: 15px; }
@@ -19,9 +19,11 @@
   <div id="area"><div id="grid"></div><div id="pal"></div></div>
   <div class="hud" id="hud"></div>
   <script src="../js/common.js"></script>
+  <script src="../js/packs.js"></script>
   <script>
-    const N = 10, COLORS = ['#ff453a', '#ffd60a', '#30d158', '#0a84ff', '#bf5af2', '#ff9f0a'];
-    const LIMIT = 22;
+    const N = W.num('size', 10), COLORS = ['#ff453a', '#ffd60a', '#30d158', '#0a84ff', '#bf5af2', '#ff9f0a'].slice(0, W.num('colors', 6));
+    let LIMIT = 22;
+    document.getElementById('grid').style.setProperty('--n', N);
     const $ = id => document.getElementById(id);
     let cells, moves, done;
     const els = [];
@@ -35,13 +37,13 @@
     });
 
     // The flooded region: everything connected to the top-left corner with its colour.
-    function region() {
-      const c = cells[0], seen = new Set([0]), stack = [0];
+    function region(board = cells) {
+      const c = board[0], seen = new Set([0]), stack = [0];
       while (stack.length) {
         const i = stack.pop(), x = i % N, y = Math.floor(i / N);
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
           const nx = x + dx, ny = y + dy, j = ny * N + nx;
-          if (nx >= 0 && ny >= 0 && nx < N && ny < N && !seen.has(j) && cells[j] === c) { seen.add(j); stack.push(j); }
+          if (nx >= 0 && ny >= 0 && nx < N && ny < N && !seen.has(j) && board[j] === c) { seen.add(j); stack.push(j); }
         }
       }
       return seen;
@@ -55,6 +57,7 @@
       const all = region().size === N * N;
       if (all || moves >= LIMIT) {
         done = true;
+        if (all && W.packDone({ title: 'Flooded! 🌊', big: moves + ' moves', text: `Limit ${LIMIT}` })) return;
         if (all) W.best('flood', moves, true);
         setTimeout(() => W.overlay({ title: all ? 'Flooded! 🌊' : 'Out of moves', big: all ? moves + ' moves' : `${region().size}%`, text: all ? `Limit was ${LIMIT}` : 'of the board covered', button: 'New board', onStart: start }), 400);
       }
@@ -66,9 +69,33 @@
       $('hud').innerHTML = `${moves}/${LIMIT}<small>moves</small>`;
     }
 
-    function start() { cells = Array.from({ length: N * N }, () => W.randInt(0, COLORS.length - 1)); moves = 0; done = false; draw(); }
+    // Moves a greedy player needs; pack levels allow that plus a little slack so they're always winnable.
+    function greedy(board) {
+      let b = [...board], n = 0;
+      while (region(b).size < N * N && n < 60) {
+        let best = -1, bs = -1;
+        for (let c = 0; c < COLORS.length; c++) {
+          if (c === b[0]) continue;
+          const t = [...b];
+          for (const i of region(b)) t[i] = c;
+          const s = region(t).size;
+          if (s > bs) { bs = s; best = c; }
+        }
+        for (const i of region(b)) b[i] = best;
+        n++;
+      }
+      return n;
+    }
+
+    function start() {
+      W.packSeed();
+      cells = Array.from({ length: N * N }, () => W.randInt(0, COLORS.length - 1));
+      W.unseed();
+      if (W.params.pack) LIMIT = greedy(cells) + 2;
+      moves = 0; done = false; draw();
+    }
     start();
-    W.overlay({ title: '🌊 Flood It', text: `Pick colours to flood the<br>board from the top-left.<br>Fill it in ${LIMIT} moves!`, onStart() {} });
+    W.overlay({ title: W.packTitle('🌊 Flood It'), text: `Pick colours to flood the<br>board from the top-left.<br>Fill it in ${LIMIT} moves!`, onStart() {} });
   </script>
 </body>
 </html>

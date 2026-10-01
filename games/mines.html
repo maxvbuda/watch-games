@@ -51,8 +51,9 @@
   <button id="mode">⛏ Dig</button>
   <div class="hud" id="hud"></div>
   <script src="../js/common.js"></script>
+  <script src="../js/packs.js"></script>
   <script>
-    const COLS = 7, ROWS = 8, MINES = 9;
+    const COLS = 7, ROWS = 8, MINES = W.num('mines', 9);
     const NUM_COLORS = ['', '#64d2ff', '#30d158', '#ff453a', '#bf5af2', '#ff9f0a', '#5ac8fa', '#fff', '#8e8e93'];
     const gridEl = document.getElementById('grid');
     const modeBtn = document.getElementById('mode');
@@ -74,6 +75,7 @@
 
     function plantMines(safe) {
       // Keep the first tap and its neighbours clear so you always get an opening.
+      W.packSeed();
       const banned = new Set([safe, ...neighbors(safe)]);
       let placed = 0;
       while (placed < MINES) {
@@ -83,6 +85,7 @@
         placed++;
       }
       cells.forEach((c, i) => (c.n = neighbors(i).filter(j => cells[j].mine).length));
+      W.unseed();
     }
 
     function reveal(i) {
@@ -131,6 +134,7 @@
       over = true;
       clearInterval(timer);
       const secs = Math.round((Date.now() - startTime) / 1000);
+      if (W.packDone({ title: 'Cleared! 🚩', big: secs + 's' })) return;
       const best = W.best('mines', secs, true);
       draw();
       setTimeout(() => W.overlay({ title: 'Cleared! 🚩', big: secs + 's', text: `Best ${best}s`, button: 'Again', onStart: start }), 500);

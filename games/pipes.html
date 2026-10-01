@@ -11,6 +11,7 @@
   <canvas id="c" class="full"></canvas>
   <div class="hud" id="hud"></div>
   <script src="../js/common.js"></script>
+  <script src="../js/packs.js"></script>
   <script>
     const canvas = document.getElementById('c');
     const hud = document.getElementById('hud');
@@ -23,7 +24,8 @@
     const rot = m => ((m << 1) | (m >> 3)) & 15;
 
     function generate() {
-      N = Math.min(4 + Math.ceil(level / 2), 7);
+      N = W.params.pack ? W.num('size', 5) : Math.min(4 + Math.ceil(level / 2), 7);
+      W.packSeed();
       const m = new Array(N * N).fill(0), seen = new Array(N * N).fill(false);
       const start = Math.floor(N * N / 2);
       const stack = [start]; seen[start] = true;
@@ -32,7 +34,7 @@
         const i = stack[stack.length - 1], x = i % N, y = Math.floor(i / N);
         const opts = DIRS.filter(([dx, dy]) => { const nx = x + dx, ny = y + dy; return nx >= 0 && ny >= 0 && nx < N && ny < N && !seen[ny * N + nx]; });
         // Keep branches short-ish so tiles aren't all straight lines.
-        if (!opts.length || (stack.length > 3 && Math.random() < 0.2)) { stack.pop(); continue; }
+        if (!opts.length || (stack.length > 3 && W.rng() < 0.2)) { stack.pop(); continue; }
         const [dx, dy, bit, back] = W.pick(opts);
         const j = (y + dy) * N + x + dx;
         m[i] |= bit; m[j] |= back; seen[j] = true; stack.push(j);
@@ -51,6 +53,7 @@
         }
       }
       tiles = m.map(v => { let t = v; for (let k = W.randInt(0, 3); k > 0; k--) t = rot(t); return t; });
+      W.unseed();
       anim = new Array(N * N).fill(0);
       moves = 0; done = false;
       computeLit();
@@ -105,6 +108,7 @@
       updateHud();
       if (solved()) {
         done = true;
+        if (W.packDone({ title: 'All connected! 💧', big: moves + ' turns' })) return;
         W.best('pipes', level);
         setTimeout(() => W.overlay({ title: 'All connected! 💧', big: moves + ' turns', text: `Level ${level}`, button: 'Next level', onStart: () => { level++; generate(); } }), 500);
       }
@@ -141,7 +145,7 @@
 
     W.pointer(canvas, { down: tap });
     generate();
-    W.overlay({ title: '🚰 Pipes', text: 'Tap tiles to rotate them.<br>Connect every pipe to the<br>blue source — no leaks!', onStart() {} });
+    W.overlay({ title: W.packTitle('🚰 Pipes'), text: 'Tap tiles to rotate them.<br>Connect every pipe to the<br>blue source — no leaks!', onStart() {} });
     W.loop(render);
   </script>
 </body>

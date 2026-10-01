@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <meta name="theme-color" content="#000000">
+  <title>Level Pack</title>
+  <link rel="stylesheet" href="css/watch.css">
+  <style>
+    .top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .top a { color: var(--fg); text-decoration: none; font-size: 18px; width: 26px; height: 26px; border-radius: 50%; background: #ffffff22; display: flex; align-items: center; justify-content: center; flex: none; }
+    .top h1 { margin: 0; font-size: 16px; text-align: left; }
+    .bar { height: 5px; border-radius: 3px; background: #2c2c2e; overflow: hidden; margin: 2px 0 8px; }
+    .bar div { height: 100%; background: var(--accent); }
+    #cont { display: block; width: 100%; text-align: center; text-decoration: none; margin-bottom: 8px; }
+    .levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 4px; }
+    .lv { aspect-ratio: 1; border-radius: 10px; background: var(--card); color: var(--fg); text-decoration: none; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; position: relative; }
+    .lv.done { background: #30d15833; color: #30d158; }
+    .lv.done::after { content: '✓'; position: absolute; top: 1px; right: 4px; font-size: 9px; }
+    .pager { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11px; color: var(--muted); }
+    .pager button { border: 0; border-radius: 12px; background: var(--card); color: var(--fg); font: inherit; font-weight: 700; padding: 6px 12px; }
+    .pager button:disabled { opacity: 0.3; }
+  </style>
+</head>
+<body>
+  <main class="hub">
+    <div class="top"><a href="index.html" aria-label="Back">‹</a><h1 id="title"></h1></div>
+    <p class="sub" id="sub" style="text-align:left"></p>
+    <div class="bar"><div id="bar"></div></div>
+    <a class="btn" id="cont"></a>
+    <nav class="levels" id="levels"></nav>
+    <div class="pager"><button id="prev">‹ Prev</button><span id="page"></span><button id="next">Next ›</button></div>
+  </main>
+  <script src="js/common.js"></script>
+  <script src="js/packs.js"></script>
+  <script>
+    const PER = 40;
+    const pack = PACKS[W.params.id] || Object.values(PACKS)[0];
+    document.title = pack.name;
+    document.getElementById('title').textContent = `${pack.emoji} ${pack.name}`;
+    const done = n => W.isSolved(`${pack.id}.${n}`);
+    let solved = 0, firstOpen = 0;
+    for (let n = 1; n <= pack.count; n++) { if (done(n)) solved++; else if (!firstOpen) firstOpen = n; }
+    document.getElementById('sub').textContent = `${solved} of ${pack.count} levels solved`;
+    document.getElementById('bar').style.width = (solved / pack.count * 100) + '%';
+    const cont = document.getElementById('cont');
+    cont.textContent = firstOpen ? (solved ? `Continue: level ${firstOpen}` : 'Start level 1') : 'All done! 🏆';
+    cont.href = 'games/' + pack.url(firstOpen || 1);
+
+    let page = 0;
+    try { page = Number(sessionStorage.getItem('wg.page.' + pack.id)) || Math.floor(((firstOpen || 1) - 1) / PER); } catch (e) {}
+    const pages = Math.ceil(pack.count / PER);
+    function render() {
+      const list = document.getElementById('levels');
+      list.innerHTML = '';
+      for (let n = page * PER + 1; n <= Math.min(pack.count, (page + 1) * PER); n++) {
+        const a = document.createElement('a');
+        a.className = 'lv' + (done(n) ? ' done' : '');
+        a.href = 'games/' + pack.url(n);
+        a.textContent = n;
+        list.appendChild(a);
+      }
+      document.getElementById('page').textContent = `${page * PER + 1}–${Math.min(pack.count, (page + 1) * PER)}`;
+      document.getElementById('prev').disabled = page === 0;
+      document.getElementById('next').disabled = page >= pages - 1;
+      try { sessionStorage.setItem('wg.page.' + pack.id, page); } catch (e) {}
+    }
+    document.getElementById('prev').addEventListener('click', () => { page = Math.max(0, page - 1); render(); scrollTo(0, 0); });
+    document.getElementById('next').addEventListener('click', () => { page = Math.min(pages - 1, page + 1); render(); scrollTo(0, 0); });
+    render();
+  </script>
+</body>
+</html>

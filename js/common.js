@@ -145,17 +145,66 @@
     }, { passive: true });
   };
 
-  W.rand = (a, b) => a + Math.random() * (b - a);
-  W.randInt = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
+  // Random numbers go through W.rng so level packs can make them repeatable with a seed.
+  W.rng = Math.random;
+  W.seed = function (n) {
+    let a = (n * 2654435761) >>> 0;   // mulberry32
+    W.rng = () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+  W.unseed = () => { W.rng = Math.random; };
+  W.shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(W.rng() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+
+  // Level-pack support: games read settings from the URL (?seed=12&size=7&...).
+  W.params = Object.fromEntries(new URLSearchParams(location.search));
+  W.num = (k, def) => (W.params[k] !== undefined && !isNaN(Number(W.params[k])) ? Number(W.params[k]) : def);
+  W.packKey = () => (W.params.pack ? `${W.params.pack}.${W.params.n}` : null);
+  // Mark the current pack level solved (shown as ✓ in the pack list).
+  W.solved = function () {
+    const k = W.packKey();
+    if (!k) return;
+    try { localStorage.setItem('wg.done.' + k, '1'); } catch (e) {}
+  };
+  W.isSolved = k => { try { return localStorage.getItem('wg.done.' + k) === '1'; } catch (e) { return false; } };
+  // URL of the next level in the same pack (or null outside a pack).
+  W.nextLevelUrl = function () {
+    if (!W.params.pack || !window.PACKS) return null;
+    const pack = window.PACKS[W.params.pack], n = Number(W.params.n) + 1;
+    return pack && n <= pack.count ? pack.url(n) : null;
+  };
+
+  // In a pack: seed the generator for this level (call right before generating the puzzle).
+  W.packSeed = () => { if (W.params.pack) W.seed(W.num('seed', 1)); };
+  // In a pack: mark solved and show "Next level". Returns false outside packs so the game shows its own result.
+  W.packDone = function ({ title, big, text }) {
+    if (!W.params.pack) return false;
+    W.solved();
+    const next = W.nextLevelUrl();
+    W.overlay({
+      title, big,
+      text: (text ? text + '<br>' : '') + `Level ${W.params.n} ✓`,
+      button: next ? 'Next level ▶' : 'Back to pack',
+      onStart: () => { location.href = next || '../pack.html?id=' + encodeURIComponent(W.params.pack); },
+    });
+    return true;
+  };
+  W.packTitle = base => (W.params.pack ? `${base} #${W.params.n}` : base);
+
+  W.rand = (a, b) => a + W.rng() * (b - a);
+  W.randInt = (a, b) => Math.floor(a + W.rng() * (b - a + 1));
   W.clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  W.pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  W.pick = arr => arr[Math.floor(W.rng() * arr.length)];
 
   // Every game page gets a back button to the hub.
   document.addEventListener('DOMContentLoaded', () => {
     if (!document.body.classList.contains('game')) return;
     const a = document.createElement('a');
     a.className = 'back';
-    a.href = '../index.html';
+    a.href = W.params.pack ? '../pack.html?id=' + encodeURIComponent(W.params.pack) : '../index.html';
     a.setAttribute('aria-label', 'Back to games');
     a.textContent = '‹';
     a.addEventListener('touchend', e => { e.stopPropagation(); });

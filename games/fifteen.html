@@ -14,10 +14,10 @@
       background: #1c1c1e; border-radius: 10px;
     }
     .t {
-      position: absolute; width: calc(25% - 4px); height: calc(25% - 4px); margin: 2px;
+      position: absolute; width: calc(100% / var(--n) - 4px); height: calc(100% / var(--n) - 4px); margin: 2px;
       border-radius: 8px; background: #ff9f0a; color: #000;
       display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: calc(var(--size) / 7); font-variant-numeric: tabular-nums;
+      font-weight: 800; font-size: calc(var(--size) / (var(--n) * 1.75)); font-variant-numeric: tabular-nums;
       transition: left 0.1s, top 0.1s;
     }
     .t.home { background: #30d158; }
@@ -27,8 +27,10 @@
   <div id="area"><div id="board"></div></div>
   <div class="hud" id="hud"></div>
   <script src="../js/common.js"></script>
+  <script src="../js/packs.js"></script>
   <script>
-    const N = 4;
+    const N = W.num('size', 4);
+    document.getElementById('board').style.setProperty('--n', N);
     const boardEl = document.getElementById('board');
     const hud = document.getElementById('hud');
     let tiles, moves, startTime, timer, done;   // tiles[pos] = number (0 = empty)
@@ -45,8 +47,8 @@
     function draw() {
       tiles.forEach((n, pos) => {
         if (!n) return;
-        els[n].style.left = (pos % N) * 25 + '%';
-        els[n].style.top = Math.floor(pos / N) * 25 + '%';
+        els[n].style.left = (pos % N) * 100 / N + '%';
+        els[n].style.top = Math.floor(pos / N) * 100 / N + '%';
         els[n].classList.toggle('home', n === pos + 1);
       });
       const secs = startTime ? Math.round((Date.now() - startTime) / 1000) : 0;
@@ -73,6 +75,7 @@
         done = true;
         clearInterval(timer);
         const secs = Math.round((Date.now() - startTime) / 1000);
+        if (W.packDone({ title: 'Solved! 🧩', big: moves + ' moves' })) return;
         const best = W.best('fifteen', moves, true);
         setTimeout(() => W.overlay({ title: 'Solved! 🧩', big: moves + ' moves', text: `${secs}s · best ${best} moves`, button: 'Again', onStart: start }), 400);
       }
@@ -95,7 +98,8 @@
       tiles = [...Array(N * N).keys()].map(i => (i + 1) % (N * N));
       // Shuffle with random legal moves so it stays solvable.
       let prev = -1;
-      for (let k = 0; k < 200; k++) {
+      W.packSeed();
+      for (let k = 0; k < W.num('shuffle', 200); k++) {
         const e = tiles.indexOf(0), ex = e % N, ey = Math.floor(e / N);
         const opts = [[1, 0], [-1, 0], [0, 1], [0, -1]]
           .map(([dx, dy]) => [ex + dx, ey + dy]).filter(([x, y]) => x >= 0 && y >= 0 && x < N && y < N)
@@ -104,6 +108,7 @@
         prev = e;
         [tiles[e], tiles[p]] = [tiles[p], tiles[e]];
       }
+      W.unseed();
       moves = 0; startTime = 0; done = false;
       draw();
     }

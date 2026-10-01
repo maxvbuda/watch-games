@@ -11,7 +11,7 @@
     #grid {
       --size: min(96vw, calc(100vh - 34px));
       width: var(--size); height: var(--size);
-      display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); gap: 4px;
+      display: grid; grid-template-columns: repeat(var(--n), 1fr); grid-template-rows: repeat(var(--n), 1fr); gap: 4px;
     }
     .l { border-radius: 8px; background: #1c1c1e; transition: background 0.15s, box-shadow 0.15s; }
     .l.on { background: #ffd60a; box-shadow: 0 0 10px #ffd60a88; }
@@ -21,8 +21,10 @@
   <div id="area"><div id="grid"></div></div>
   <div class="hud" id="hud"></div>
   <script src="../js/common.js"></script>
+  <script src="../js/packs.js"></script>
   <script>
-    const N = 5;
+    const N = W.num('size', 5);
+    document.getElementById('grid').style.setProperty('--n', N);
     const gridEl = document.getElementById('grid');
     const hud = document.getElementById('hud');
     let lights, moves, level = 1, done;
@@ -52,6 +54,7 @@
       draw();
       if (!lights.includes(1)) {
         done = true;
+        if (W.packDone({ title: 'Lights out! 🌑', big: moves + ' moves' })) return;
         const best = W.best('lightsout', level);
         setTimeout(() => W.overlay({ title: 'Lights out! 🌑', big: moves + ' moves', text: `Level ${level} cleared`, button: 'Next level', onStart: () => { level++; start(); } }), 400);
       }
@@ -66,14 +69,16 @@
       // Build the puzzle by pressing random squares, so it's always solvable.
       lights = new Array(N * N).fill(0);
       done = false;
-      const presses = Math.min(3 + level, 14);
+      const presses = W.params.pack ? W.num('presses', 5) : Math.min(3 + level, 14);
+      W.packSeed();
       while (!lights.includes(1)) for (let k = 0; k < presses; k++) toggle(W.randInt(0, N * N - 1));
+      W.unseed();
       moves = 0;
       draw();
     }
 
     start();
-    W.overlay({ title: '💡 Lights Out', text: 'Tapping a light flips it<br>and its neighbours.<br>Turn them all off!', onStart() {} });
+    W.overlay({ title: W.packTitle('💡 Lights Out'), text: 'Tapping a light flips it<br>and its neighbours.<br>Turn them all off!', onStart() {} });
   </script>
 </body>
 </html>

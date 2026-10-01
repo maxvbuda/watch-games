@@ -11,6 +11,7 @@
   <canvas id="c" class="full"></canvas>
   <div class="hud" id="hud"></div>
   <script src="../js/common.js"></script>
+  <script src="../js/packs.js"></script>
   <script>
     const canvas = document.getElementById('c');
     const hud = document.getElementById('hud');
@@ -43,8 +44,10 @@
     }
 
     function newLevel() {
-      N = Math.min(5 + level, 14);
+      N = W.params.pack ? W.num('size', 8) : Math.min(5 + level, 14);
+      W.packSeed();
       walls = generate(N);
+      W.unseed();
       pos = { x: 0, y: 0 };
       draw = { x: 0, y: 0 };
       trail = [{ x: 0, y: 0 }];
@@ -68,6 +71,7 @@
       if (moved && pos.x === N - 1 && pos.y === N - 1) {
         state = 'won';
         const secs = ((performance.now() - startT) / 1000).toFixed(1);
+        if (W.packDone({ title: 'Maze solved! 🌀', big: secs + 's' })) return;
         W.best('maze', level);
         setTimeout(() => W.overlay({ title: `Level ${level} done!`, big: secs + 's', text: 'Next maze is bigger', button: 'Next', onStart: () => { level++; newLevel(); } }), 300);
       }
@@ -108,11 +112,11 @@
 
       ctx.fillStyle = '#0a84ff';
       ctx.beginPath(); ctx.arc(ox + (draw.x + 0.5) * cs, oy + (draw.y + 0.5) * cs, cs * 0.32, 0, Math.PI * 2); ctx.fill();
-      if (state === 'play') hud.innerHTML = `L${level}<small>${((performance.now() - startT) / 1000).toFixed(0)}s</small>`;
+      if (state === 'play') hud.innerHTML = `${W.params.n ? "#" + W.params.n : "L" + level}<small>${((performance.now() - startT) / 1000).toFixed(0)}s</small>`;
     }
 
     W.swipe(canvas, move);
-    W.overlay({ title: '🌀 Maze', text: 'Swipe to roll the ball.<br>It slides to the next turn.<br>Reach the green corner!', onStart: newLevel });
+    W.overlay({ title: W.packTitle('🌀 Maze'), text: 'Swipe to roll the ball.<br>It slides to the next turn.<br>Reach the green corner!', onStart: newLevel });
     W.loop(render);
   </script>
 </body>

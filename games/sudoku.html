@@ -33,6 +33,7 @@
   </div>
   <div class="hud" id="hud"></div>
   <script src="../js/common.js"></script>
+  <script src="../js/packs.js"></script>
   <script>
     const N = 6, BR = 2, BC = 3;   // 6x6 grid with 2x3 boxes
     const gridEl = document.getElementById('grid');
@@ -41,7 +42,7 @@
     let cells, given, sel = -1, startT, timer, done, mistakes;
     const els = [];
 
-    const shuffle = a => a.sort(() => Math.random() - 0.5);
+    const shuffle = a => W.shuffle(a);
 
     function generate() {
       // Start from a valid pattern, then shuffle digits, rows within bands, bands, cols within stacks, stacks.
@@ -96,6 +97,7 @@
         done = true;
         clearInterval(timer);
         const secs = Math.round((Date.now() - startT) / 1000);
+        if (W.packDone({ title: 'Solved! 🧠', big: secs + 's' })) return;
         const best = W.best('sudoku', secs, true);
         setTimeout(() => W.overlay({ title: 'Solved! 🧠', big: secs + 's', text: `Best ${best}s`, button: 'New puzzle', onStart: start }), 400);
       }
@@ -115,8 +117,10 @@
     }
 
     function start() {
+      W.packSeed();
       const sol = generate();
-      const blanks = new Set(shuffle([...Array(N * N).keys()]).slice(0, 18));
+      const blanks = new Set(shuffle([...Array(N * N).keys()]).slice(0, W.num('blanks', 18)));
+      W.unseed();
       cells = sol.map((v, i) => (blanks.has(i) ? 0 : v));
       given = cells.map(Boolean);
       sel = cells.indexOf(0);
