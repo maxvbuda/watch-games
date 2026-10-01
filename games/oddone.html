@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Odd One Out</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 28px; }
+    #grid { --size: min(96vw, calc(100vh - 34px)); width: var(--size); height: var(--size); display: grid; gap: 2px; }
+    #grid div { display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #1c1c1e; }
+    #timer { position: absolute; left: 38px; right: 60px; top: max(14px, env(safe-area-inset-top)); height: 5px; border-radius: 3px; background: #ffffff22; overflow: hidden; }
+    #bar { height: 100%; background: #ffd60a; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="grid"></div></div>
+  <div id="timer"><div id="bar"></div></div>
+  <div class="hud" id="hud">0</div>
+  <script src="../js/common.js"></script>
+  <script>
+    // Find the one emoji that's different. Grids grow and the pairs get sneakier.
+    const PAIRS = [['😀', '😃'], ['🐶', '🐕'], ['🍎', '🍅'], ['⭐️', '🌟'], ['🌕', '🌝'], ['🐱', '🐈'], ['🌲', '🌳'], ['🔵', '🟦'], ['🙂', '🙃'], ['🦊', '🐺'],
+      ['🍊', '🍑'], ['💙', '💎'], ['🐟', '🐠'], ['😐', '😑'], ['🌸', '🌺'], ['🥚', '🍳'], ['⚽️', '🏐'], ['🐻', '🐼'], ['🍪', '🍩'], ['🚗', '🚙'], ['😺', '😸'], ['🐸', '🐢']];
+    const $ = id => document.getElementById(id);
+    let score, timeLeft, playing = false;
+    function round() {
+      const n = Math.min(8, 3 + Math.floor(score / 3)), [a, b] = W.shuffle([...W.pick(PAIRS)]);
+      const odd = W.randInt(0, n * n - 1);
+      $('grid').style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+      $('grid').innerHTML = '';
+      for (let i = 0; i < n * n; i++) {
+        const d = document.createElement('div');
+        d.textContent = i === odd ? b : a;
+        d.style.fontSize = `calc(var(--size) / ${n * 1.45})`;
+        const tap = e => { e.preventDefault(); if (!playing) return; if (i === odd) { score++; timeLeft = Math.min(30, timeLeft + 2); $('hud').textContent = score; round(); } else { timeLeft -= 3; d.style.background = '#ff453a'; } };
+        d.addEventListener('touchstart', tap, { passive: false });
+        d.addEventListener('mousedown', tap);
+        $('grid').appendChild(d);
+      }
+    }
+    function start() { score = 0; timeLeft = 30; playing = true; $('hud').textContent = '0'; round(); }
+    W.loop(dt => {
+      if (!playing) return;
+      timeLeft -= dt;
+      $('bar').style.width = Math.max(0, timeLeft / 30 * 100) + '%';
+      if (timeLeft <= 0) { playing = false; const best = W.best('oddone', score); W.overlay({ title: "Time's up!", big: score, text: `Best ${best}`, button: 'Again', onStart: start }); }
+    });
+    W.overlay({ title: '🔍 Odd One Out', text: 'Tap the emoji that\'s<br>different. +2s each, −3s<br>for a wrong tap.', onStart: start });
+  </script>
+</body>
+</html>
