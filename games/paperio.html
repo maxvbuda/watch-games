@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Paper.io</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>.hud { color: #1c1c1e; text-shadow: 0 0 3px #fff; } .back { background: rgba(0, 0, 0, 0.3); }</style>
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const G = 56, STEP = 0.11;   // grid size, seconds per cell
+    const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];   // up, right, down, left
+    const COLORS = ['#30d158', '#ff453a', '#0a84ff', '#ff9f0a'];
+    const NAMES = ['You', 'Red', 'Blue', 'Orange'];
+    // own[i] = owner id+1 of territory; trail[i] = owner id+1 of a trail passing through.
+    let own, trail, players, me, stepT, state = 'ready', t = 0, flash = [], best = W.best('paperio') || 0, lastPct = 0;
+
+    function claimStart(p, cx, cy) {
+      for (let y = cy - 2; y <= cy + 2; y++) for (let x = cx - 2; x <= cx + 2; x++) if (x >= 0 && y >= 0 && x < G && y < G) own[y * G + x] = p.id + 1;
+      p.x = cx; p.y = cy; p.fx = cx; p.fy = cy; p.trail = []; p.alive = true; p.dir = W.randInt(0, 3); p.want = p.dir;
+      p.plan = []; p.home = true;
+    }
+    function reset() {
+      own = new Uint8Array(G * G); trail = new Uint8Array(G * G);
+      players = NAMES.map((name, id) => ({ id, name, color: COLORS[id], ai: id > 0, kills: 0 }));
+      me = players[0];
+      claimStart(me, G / 2, G / 2);
+      const spots = [[10, 10], [G - 11, 10], [10, G - 11], [G - 11, G - 11]];
+      players.slice(1).forEach((p, i) => claimStart(p, ...spots[i]));
+      stepT = 0; t = 0; flash = [];
+      updateHud();
+    }
+    const pct = p => Math.round(own.reduce((a, v) => a + (v === p.id + 1), 0) / (G * G) * 1000) / 10;
+    function updateHud() { hud.innerHTML = `${pct(me).toFixed(1)}%<small>${Math.round(t)}s</small>`; }
+
+    // Close a loop: everything not reachable from outside (without crossing p's land/trail) becomes p's.
+    function capture(p) {
+      const tag = p.id + 1;
+      for (const i of p.trail) { own[i] = tag; trail[i] = 0; }
+      p.trail = [];
+      const seen = new Uint8Array(G * G), q = [];
+      for (let k = 0; k < G; k++) for (const i of [k, (G - 1) * G + k, k * G, k * G + G - 1]) if (own[i] !== tag && !seen[i]) { seen[i] = 1; q.push(i); }
+      while (q.length) {
+        const i = q.pop(), x = i % G, y = (i / G) | 0;
+        for (const [dx, dy] of DIRS) {
+          const nx = x + dx, ny = y + dy, j = ny * G + nx;
+          if (nx >= 0 && ny >= 0 && nx < G && ny < G && !seen[j] && own[j] !== tag) { seen[j] = 1; q.push(j); }
+        }
+      }
+      let gained = 0;
+      for (let i = 0; i < G * G; i++) if (!seen[i] && own[i] !== tag) { own[i] = tag; gained++; flash.push({ i, t: 0.3 }); }
+      if (p === me && gained) W.sfx(500 + Math.min(gained, 200) * 3, { type: 'triangle', dur: 0.2, vol: 0.1, slide: 900 });
+      // Anyone whose land is now gone entirely is out.
+      for (const o of players) if (o !== p && o.alive && !own.includes(o.id + 1)) kill(o, p);
+    }
+
+    function kill(p, by) {
+      p.alive = false;
+      for (const i of p.trail) trail[i] = 0;
+      p.trail = [];
+      for (let i = 0; i < G * G; i++) if (own[i] === p.id + 1) own[i] = 0;
+      if (by && by !== p) by.kills++;
+      if (p === me) {
+        state = 'over';
+        W.sfx(180, { type: 'sawtooth', dur: 0.5, vol: 0.1, slide: 50 });
+        best = W.best('paperio', lastPct);
+        setTimeout(() => W.overlay({ title: by && by !== me ? `${by.name} cut you!` : 'You crashed!', big: lastPct.toFixed(1) + '%', text: `Best ${best}% · ${me.kills} kills`, button: 'Again', onStart: start }), 500);
+      } else setTimeout(() => { if (state === 'play') respawn(p); }, 2500);
+    }
+    function respawn(p) {
+      for (let tries = 0; tries < 50; tries++) {
+        const cx = W.randInt(4, G - 5), cy = W.randInt(4, G - 5);
+        let free = true;
+        for (let y = cy - 2; y <= cy + 2 && free; y++) for (let x = cx - 2; x <= cx + 2; x++) if (own[y * G + x] || trail[y * G + x]) free = false;
+        if (free) return claimStart(p, cx, cy);
+      }
+    }
+
+    // AI: from home, head out a few cells, turn, run, turn back toward home — a rectangle — then return.
+    function aiDir(p) {
+      const tag = p.id + 1, inHome = own[p.y * G + p.x] === tag;
+      const safe = d => { const nx = p.x + DIRS[d][0], ny = p.y + DIRS[d][1]; return nx >= 0 && ny >= 0 && nx < G && ny < G && trail[ny * G + nx] !== tag; };
+      if (inHome && !p.plan.length) {
+        const out = W.randInt(3, 7 + Math.min(6, p.kills * 2)), side = W.randInt(3, 8), d = W.randInt(0, 3), turn = W.rng() < 0.5 ? 1 : 3;
+        p.plan = [...Array(out).fill(d), ...Array(side).fill((d + turn) % 4), ...Array(out).fill((d + 2) % 4)];
+      }
+      let d = p.plan.length ? p.plan.shift() : p.dir;
+      if (!inHome && !p.plan.length) {
+        // Head home: step toward the nearest own cell.
+        let bestD = Infinity, target = null;
+        for (let i = 0; i < G * G; i++) if (own[i] === tag) { const dd = Math.abs(i % G - p.x) + Math.abs(((i / G) | 0) - p.y); if (dd < bestD) { bestD = dd; target = i; } }
+        if (target !== null) { const tx = target % G, ty = (target / G) | 0; const opts = [0, 1, 2, 3].filter(safe).sort((a, b) => (Math.abs(p.x + DIRS[a][0] - tx) + Math.abs(p.y + DIRS[a][1] - ty)) - (Math.abs(p.x + DIRS[b][0] - tx) + Math.abs(p.y + DIRS[b][1] - ty))); if (opts.length) d = opts[0]; }
+      }
+      if ((d + 2) % 4 === p.dir) d = p.dir;   // no reversing
+      if (!safe(d)) { const alt = [0, 1, 2, 3].filter(k => k !== (p.dir + 2) % 4 && safe(k)); if (alt.length) { d = W.pick(alt); p.plan = []; } }
+      // Hunt: if the player's trail is right next to us, go for it.
+      for (let k = 0; k < 4; k++) { const nx = p.x + DIRS[k][0], ny = p.y + DIRS[k][1]; if (nx >= 0 && ny >= 0 && nx < G && ny < G && trail[ny * G + nx] && trail[ny * G + nx] !== tag && k !== (p.dir + 2) % 4) d = k; }
+      return d;
+    }
+
+    function step() {
+      for (const p of players) {
+        if (!p.alive) continue;
+        p.dir = p.ai ? aiDir(p) : ((p.want + 2) % 4 === p.dir ? p.dir : p.want);
+        const nx = p.x + DIRS[p.dir][0], ny = p.y + DIRS[p.dir][1];
+        if (nx < 0 || ny < 0 || nx >= G || ny >= G) { kill(p, null); continue; }
+        p.x = nx; p.y = ny;
+        const i = ny * G + nx, tag = p.id + 1;
+        if (trail[i]) { const victim = players[trail[i] - 1]; kill(victim, victim === p ? null : p); if (victim === p) continue; }
+        if (own[i] === tag) { if (p.trail.length) capture(p); }
+        else { trail[i] = tag; p.trail.push(i); }
+      }
+    }
+
+    function update(dt) {
+      t += dt;
+      stepT += dt;
+      while (stepT >= STEP && state === 'play') { stepT -= STEP; step(); }
+      for (const p of players) { const k = Math.min(1, dt / STEP); p.fx += (p.x - p.fx) * k; p.fy += (p.y - p.fy) * k; }
+      lastPct = pct(me);
+      updateHud();
+      if (lastPct >= 50 && state === 'play') {
+        state = 'over';
+        W.best('paperio', lastPct);
+        W.overlay({ title: '🏆 You conquered half the map!', big: lastPct.toFixed(1) + '%', text: `${me.kills} kills · ${Math.round(t)}s`, button: 'Again', onStart: start });
+      }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const cs = Math.max(w, h) / 24;   // ~24 cells across
+      const camX = me.fx * cs - w / 2 + cs / 2, camY = me.fy * cs - h * 0.55 + cs / 2;
+      ctx.fillStyle = '#e9e5f5'; ctx.fillRect(0, 0, w, h);
+      const x0 = Math.max(0, Math.floor(camX / cs)), y0 = Math.max(0, Math.floor(camY / cs)), x1 = Math.min(G, Math.ceil((camX + w) / cs) + 1), y1 = Math.min(G, Math.ceil((camY + h) / cs) + 1);
+      ctx.fillStyle = '#f6f4fb';
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if ((x + y) % 2) ctx.fillRect(x * cs - camX, y * cs - camY, cs, cs);
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+        const i = y * G + x;
+        if (own[i]) {
+          ctx.fillStyle = COLORS[own[i] - 1]; ctx.fillRect(x * cs - camX, y * cs - camY, cs + 0.5, cs + 0.5);
+          // Shade only the bottom edge of a territory so it looks like a raised sheet of paper.
+          if (y + 1 >= G || own[i + G] !== own[i]) { ctx.fillStyle = '#00000033'; ctx.fillRect(x * cs - camX, y * cs - camY + cs - 3, cs + 0.5, 3); }
+        }
+        if (trail[i]) { ctx.fillStyle = COLORS[trail[i] - 1] + '88'; ctx.fillRect(x * cs - camX + cs * 0.15, y * cs - camY + cs * 0.15, cs * 0.7, cs * 0.7); }
+      }
+      for (const f of flash) { f.t -= dt; ctx.fillStyle = `rgba(255,255,255,${Math.max(0, f.t * 2)})`; ctx.fillRect((f.i % G) * cs - camX, ((f.i / G) | 0) * cs - camY, cs, cs); }
+      flash = flash.filter(f => f.t > 0);
+      ctx.strokeStyle = '#ff453a'; ctx.lineWidth = 3; ctx.strokeRect(-camX, -camY, G * cs, G * cs);
+      for (const p of players) {
+        if (!p.alive) continue;
+        const x = p.fx * cs - camX, y = p.fy * cs - camY;
+        // Player square: darker than its territory with a white rim so it stands out on home ground.
+        ctx.fillStyle = '#0004'; ctx.fillRect(x + 1, y + 3, cs + 2, cs + 2);
+        ctx.fillStyle = '#fff'; ctx.fillRect(x - 2, y - 2, cs + 4, cs + 4);
+        ctx.fillStyle = p.color; ctx.fillRect(x, y, cs, cs);
+        ctx.fillStyle = '#00000044'; ctx.fillRect(x, y, cs, cs);
+        ctx.fillStyle = '#ffffff66'; ctx.fillRect(x, y, cs, 2);
+        if (p.ai) { ctx.fillStyle = '#1c1c1e'; ctx.font = '700 8px -apple-system, system-ui'; ctx.textAlign = 'center'; ctx.fillText(p.name, x + cs / 2, y - 4); }
+      }
+      // Mini leaderboard.
+      ctx.fillStyle = '#ffffffcc'; ctx.fillRect(3, h - 46, 64, 40);
+      ctx.font = '600 8px -apple-system, system-ui'; ctx.textAlign = 'left';
+      [...players].sort((a, b) => pct(b) - pct(a)).forEach((p, k) => { ctx.fillStyle = p.color; ctx.fillRect(6, h - 40 + k * 9, 6, 6); ctx.fillStyle = '#1c1c1e'; ctx.fillText(`${p.name} ${p.alive ? pct(p).toFixed(1) + '%' : '💀'}`, 15, h - 34 + k * 9); });
+    }
+
+    // Controls: swipe, tap left/right side to turn, or turn the Crown (each notch = a 90° turn).
+    const turn = k => { if (state === 'play') me.want = (me.dir + k + 4) % 4; };
+    W.swipe(canvas, d => { if (state === 'play') me.want = { up: 0, right: 1, down: 2, left: 3 }[d]; }, p => turn(p.x < view.w / 2 ? -1 : 1));
+    let acc = 0;
+    W.crown(d => { acc += d; if (acc > 45) { acc = 0; turn(1); } if (acc < -45) { acc = 0; turn(-1); } });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🟩 Paper.io', text: 'Leave your land, draw a loop,<br>come back to claim it. Don\'t<br>let anyone touch your trail!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
