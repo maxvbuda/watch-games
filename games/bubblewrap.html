@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Bubble Wrap</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 26px; }
+    #wrap { --size: min(96vw, calc(100vh - 32px)); width: var(--size); height: var(--size); display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(6, 1fr); gap: 3px; }
+    .b { border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffffffcc, #bfe6ff88 40%, #64d2ff55 75%); box-shadow: inset 0 -2px 4px #0003; transition: transform 0.08s; }
+    .b.popped { background: radial-gradient(circle, #ffffff22, #64d2ff22); transform: scale(0.85); box-shadow: none; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="wrap"></div></div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    // Endless bubble wrap. Pop them all for a fresh sheet. Sounds included.
+    const $ = id => document.getElementById(id);
+    let popped = 0, total = 0, audio;
+    function pop() {
+      try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        const n = audio.createBufferSource(), buf = audio.createBuffer(1, 2000, audio.sampleRate), d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 4);
+        const g = audio.createGain(); g.gain.value = 0.5;
+        n.buffer = buf; n.playbackRate.value = W.rand(0.8, 1.4); n.connect(g).connect(audio.destination); n.start();
+      } catch (e) {}
+    }
+    function sheet() {
+      $('wrap').innerHTML = ''; popped = 0;
+      for (let i = 0; i < 36; i++) {
+        const b = document.createElement('div');
+        b.className = 'b';
+        const hit = e => { e.preventDefault(); if (b.classList.contains('popped')) return; b.classList.add('popped'); pop(); popped++; total++; W.best('bubblewrap', total); draw(); if (popped === 36) setTimeout(sheet, 500); };
+        b.addEventListener('touchstart', hit, { passive: false });
+        b.addEventListener('mousedown', hit);
+        $('wrap').appendChild(b);
+      }
+      draw();
+    }
+    function draw() { $('hud').innerHTML = `${total}<small>popped</small>`; }
+    total = W.best('bubblewrap') || 0;
+    sheet();
+  </script>
+</body>
+</html>
