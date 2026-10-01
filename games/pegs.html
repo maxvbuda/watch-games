@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Peg Solitaire</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // Classic 15-hole triangle. Jump a peg over a neighbour into an empty hole; the jumped peg is removed. Leave just one!
+    const ROWS = 5;
+    const holes = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c <= r; c++) holes.push({ r, c });
+    const idx = (r, c) => (r >= 0 && c >= 0 && c <= r && r < ROWS ? (r * (r + 1)) / 2 + c : -1);
+    const DIRS = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, -1]];
+    let pegs, sel, history;
+
+    function moves() {
+      const out = [];
+      holes.forEach((h, i) => {
+        if (!pegs[i]) return;
+        for (const [dr, dc] of DIRS) {
+          const m = idx(h.r + dr, h.c + dc), t = idx(h.r + 2 * dr, h.c + 2 * dc);
+          if (m >= 0 && t >= 0 && pegs[m] && !pegs[t]) out.push({ from: i, over: m, to: t });
+        }
+      });
+      return out;
+    }
+    function updateHud() { hud.innerHTML = `${pegs.filter(Boolean).length}<small>pegs left</small>`; }
+    function pos(i) {
+      const { r, c } = holes[i], s = Math.min(view.w * 0.19, (view.h - 50) / ROWS);
+      return { x: view.w / 2 + (c - r / 2) * s, y: 44 + r * s * 0.9, s };
+    }
+    function tap(p) {
+      let hit = -1;
+      holes.forEach((_, i) => { const q = pos(i); if (Math.hypot(p.x - q.x, p.y - q.y) < q.s * 0.45) hit = i; });
+      if (hit < 0) { sel = null; return; }
+      if (pegs[hit]) { sel = hit; return; }
+      if (sel === null) return;
+      const m = moves().find(m => m.from === sel && m.to === hit);
+      if (!m) return;
+      history.push([...pegs]);
+      pegs[m.from] = false; pegs[m.over] = false; pegs[m.to] = true; sel = null;
+      updateHud();
+      if (!moves().length) {
+        const left = pegs.filter(Boolean).length;
+        const best = W.best('pegs', left, true);
+        const rating = left === 1 ? 'Genius! 🧠' : left === 2 ? 'Purty smart' : left === 3 ? 'Just plain dumb' : 'Eg-no-ra-moose';
+        setTimeout(() => W.overlay({ title: rating, big: left + ' left', text: `Best ${best} · no moves left`, button: 'Again', onStart: start }), 400);
+      }
+    }
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#3b2412'; ctx.fillRect(0, 0, w, h);
+      const a = pos(0), b = pos(idx(4, 0)), c = pos(idx(4, 4));
+      ctx.fillStyle = '#c48a50'; ctx.beginPath(); ctx.moveTo(a.x, a.y - a.s * 0.6); ctx.lineTo(c.x + c.s * 0.7, c.y + c.s * 0.45); ctx.lineTo(b.x - b.s * 0.7, b.y + b.s * 0.45); ctx.closePath(); ctx.fill();
+      const legal = sel !== null ? moves().filter(m => m.from === sel).map(m => m.to) : [];
+      holes.forEach((_, i) => {
+        const q = pos(i);
+        ctx.fillStyle = legal.includes(i) ? '#30d15899' : '#5c3a1e'; ctx.beginPath(); ctx.arc(q.x, q.y, q.s * 0.2, 0, Math.PI * 2); ctx.fill();
+        if (pegs[i]) {
+          ctx.fillStyle = i === sel ? '#ffd60a' : '#ff453a'; ctx.beginPath(); ctx.arc(q.x, q.y - 2, q.s * 0.24, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffffff66'; ctx.beginPath(); ctx.arc(q.x - q.s * 0.07, q.y - q.s * 0.1, q.s * 0.07, 0, Math.PI * 2); ctx.fill();
+        }
+      });
+      ctx.fillStyle = '#e5c9a8'; ctx.font = '600 10px -apple-system, system-ui'; ctx.textAlign = 'center';
+      ctx.fillText('swipe down to undo', w / 2, h - 6);
+    }
+    let s0 = null;
+    W.pointer(canvas, { down: p => (s0 = p), up: p => { if (!s0) return; if (p.y - s0.y > 30 && history.length) { pegs = history.pop(); sel = null; updateHud(); } else if (Math.abs(p.y - s0.y) < 15) tap(s0); s0 = null; } });
+    function start() { pegs = holes.map((_, i) => i !== W.pick([0, 3, 4, 12])); sel = null; history = []; updateHud(); }
+    start();
+    W.overlay({ title: '📍 Peg Solitaire', text: 'Tap a peg, then an empty hole<br>2 away to jump. Leave only<br>one peg to be a genius!', onStart() {} });
+    W.loop(render);
+  </script>
+</body>
+</html>
