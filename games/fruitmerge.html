@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Fruit Merge</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>.back { background: rgba(80, 40, 0, 0.35); } .hud { color: #5a3510; text-shadow: none; } .hud small { color: #8e6a3a; }</style>
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+
+    // Each fruit merges into the next one up. Two watermelons vanish for a big bonus.
+    const FRUITS = ['🍒', '🍓', '🍇', '🍊', '🍋', '🍎', '🍐', '🍑', '🍍', '🍈', '🍉'];
+    const RADII = [7, 9, 12, 14.5, 17, 20.5, 24, 28, 32.5, 37.5, 44];   // at 198px wide
+    const POINTS = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66];
+    let fruits, dropX, next, cur, cooldown, score, state = 'ready', pops = [], shake = 0, dangerT = 0, idSeq = 0, best = W.best('fruitmerge') || 0;
+
+    const S = () => view.w / 198;
+    const radius = t => RADII[t] * S();
+    const BOX = () => ({ l: 5, r: view.w - 5, top: 62, bottom: view.h - 5 });
+    const LINE = () => BOX().top + 6;
+    const pickNext = () => W.randInt(0, 4);
+
+    function reset() {
+      fruits = []; dropX = view.w / 2; cur = pickNext(); next = pickNext(); cooldown = 0; score = 0; dangerT = 0; pops = [];
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `${score}<small>best ${Math.max(best, score)}</small>`; }
+
+    function drop() {
+      if (state !== 'play' || cooldown > 0) return;
+      const r = radius(cur), b = BOX();
+      fruits.push({ id: idSeq++, t: cur, x: W.clamp(dropX, b.l + r, b.r - r), y: b.top - r - 2, vx: 0, vy: 0, a: 0, born: 0 });
+      cur = next; next = pickNext(); cooldown = 0.55;
+      W.sfx(330, { type: 'triangle', dur: 0.06, vol: 0.05 });
+    }
+
+    function merge(a, b) {
+      a.dead = b.dead = true;
+      const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2, t = a.t;
+      score += POINTS[t] * 2;
+      for (let i = 0; i < 10 + t * 2; i++) pops.push({ x, y, vx: W.rand(-1, 1) * (60 + t * 10), vy: W.rand(-1, 0.3) * (60 + t * 10), t: 0.5, c: `hsl(${(t * 33) % 360},90%,60%)` });
+      W.sfx(260 * Math.pow(1.12, t), { type: 'sine', dur: 0.18, vol: 0.12, slide: 520 * Math.pow(1.12, t) });
+      if (t === FRUITS.length - 1) { score += 200; shake = 0.4; return; }   // two watermelons: pop!
+      fruits.push({ id: idSeq++, t: t + 1, x, y, vx: (a.vx + b.vx) / 2, vy: Math.min(a.vy, b.vy) - 40, a: 0, born: 0.25 });
+      if (t >= 6) shake = 0.15 + t * 0.02;
+      updateHud();
+    }
+
+    function physics(dt) {
+      const g = 900 * S(), b = BOX();
+      for (const f of fruits) {
+        f.vy += g * dt;
+        f.x += f.vx * dt; f.y += f.vy * dt;
+        f.born = Math.max(0, f.born - dt);
+        const r = radius(f.t);
+        if (f.x < b.l + r) { f.x = b.l + r; f.vx = Math.abs(f.vx) * 0.3; }
+        if (f.x > b.r - r) { f.x = b.r - r; f.vx = -Math.abs(f.vx) * 0.3; }
+        if (f.y > b.bottom - r) { f.y = b.bottom - r; f.vy = -Math.abs(f.vy) * 0.15; f.vx *= 0.96; }
+        f.a += f.vx / r * dt;
+      }
+      // Pairwise collisions: separate by mass (r²) and kill the approaching velocity.
+      for (let i = 0; i < fruits.length; i++) {
+        const a = fruits[i];
+        if (a.dead) continue;
+        for (let j = i + 1; j < fruits.length; j++) {
+          const c = fruits[j];
+          if (c.dead) continue;
+          const ra = radius(a.t), rc = radius(c.t), dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy), min = ra + rc;
+          if (d >= min || d === 0) continue;
+          if (a.t === c.t) { merge(a, c); break; }
+          const nx = dx / d, ny = dy / d, overlap = min - d, ma = ra * ra, mc = rc * rc, tot = ma + mc;
+          a.x -= nx * overlap * (mc / tot); a.y -= ny * overlap * (mc / tot);
+          c.x += nx * overlap * (ma / tot); c.y += ny * overlap * (ma / tot);
+          const rv = (c.vx - a.vx) * nx + (c.vy - a.vy) * ny;
+          if (rv < 0) {
+            const imp = -(1.15) * rv / (1 / ma + 1 / mc);
+            a.vx -= imp * nx / ma; a.vy -= imp * ny / ma;
+            c.vx += imp * nx / mc; c.vy += imp * ny / mc;
+          }
+        }
+      }
+      fruits = fruits.filter(f => !f.dead);
+      for (const f of fruits) { f.vx *= Math.pow(0.6, dt); }
+    }
+
+    function update(dt) {
+      cooldown = Math.max(0, cooldown - dt);
+      for (let s = 0; s < 6; s++) physics(dt / 6);
+      // Lose if a settled fruit stays above the line.
+      const over = fruits.some(f => f.y - radius(f.t) < LINE() && Math.abs(f.vy) < 40 && f.id < idSeq - 1);
+      dangerT = over ? dangerT + dt : Math.max(0, dangerT - dt * 2);
+      if (dangerT > 1.6) {
+        state = 'over';
+        best = W.best('fruitmerge', score);
+        W.sfx(200, { type: 'sawtooth', dur: 0.5, vol: 0.1, slide: 60 });
+        setTimeout(() => W.overlay({ title: 'Jar overflowed!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 500);
+      }
+    }
+
+    function drawFruit(t, x, y, a = 0, scale = 1) {
+      const r = radius(t) * scale;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+      ctx.font = `${Math.round(r * 2.15)}px sans-serif`;
+      ctx.fillText(FRUITS[t], 0, r * 0.08);
+      ctx.restore();
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      shake = Math.max(0, shake - dt);
+      ctx.save();
+      if (shake > 0) ctx.translate(W.rand(-1, 1) * shake * 8, W.rand(-1, 1) * shake * 8);
+      const bg = ctx.createLinearGradient(0, 0, 0, h);
+      bg.addColorStop(0, '#ffe8c2'); bg.addColorStop(1, '#ffc98a');
+      ctx.fillStyle = bg; ctx.fillRect(-10, -10, w + 20, h + 20);
+      const b = BOX();
+      // Jar.
+      ctx.fillStyle = '#fff7ea'; ctx.fillRect(b.l, b.top, b.r - b.l, b.bottom - b.top);
+      ctx.strokeStyle = '#c9884a'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(b.l, b.top - 6); ctx.lineTo(b.l, b.bottom); ctx.lineTo(b.r, b.bottom); ctx.lineTo(b.r, b.top - 6); ctx.stroke();
+      // Danger line pulses when you're close to losing.
+      ctx.strokeStyle = dangerT > 0 ? `rgba(255,69,58,${0.5 + Math.sin(performance.now() / 80) * 0.4})` : '#ff453a55';
+      ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(b.l, LINE()); ctx.lineTo(b.r, LINE()); ctx.stroke(); ctx.setLineDash([]);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000';
+      for (const f of fruits) drawFruit(f.t, f.x, f.y, f.a, f.born > 0 ? 1 + f.born : 1);
+      // Dropper with guide line and the fruit you're holding.
+      if (state === 'play') {
+        const r = radius(cur), x = W.clamp(dropX, b.l + r, b.r - r);
+        ctx.strokeStyle = '#0002'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, b.top); ctx.lineTo(x, b.bottom); ctx.stroke();
+        ctx.globalAlpha = cooldown > 0 ? 0.4 : 1;
+        drawFruit(cur, x, b.top - r - 2);
+        ctx.globalAlpha = 1;
+      }
+      for (const p of pops) { p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt; ctx.fillStyle = p.c; ctx.globalAlpha = Math.max(0, p.t * 2); ctx.beginPath(); ctx.arc(p.x, p.y, 2.2, 0, 7); ctx.fill(); }
+      ctx.globalAlpha = 1;
+      pops = pops.filter(p => p.t > 0);
+      ctx.restore();
+      // Next-fruit bubble, tucked under the score.
+      const nx = w - 22, ny = 47;
+      ctx.fillStyle = '#ffffffcc'; ctx.beginPath(); ctx.arc(nx, ny, 10, 0, 7); ctx.fill();
+      ctx.font = '600 7px -apple-system, system-ui'; ctx.fillStyle = '#8e6a3a'; ctx.fillText('next', nx - 20, ny);
+      ctx.fillStyle = '#000'; ctx.font = '13px sans-serif'; ctx.fillText(FRUITS[next], nx, ny + 1);
+    }
+
+    // Drag to aim, lift to drop. Crown moves the dropper; a tap without dragging drops in place.
+    let moved = false, startX = 0;
+    W.pointer(canvas, {
+      down: p => { moved = false; startX = p.x; },
+      move: p => { if (Math.abs(p.x - startX) > 4) moved = true; if (moved) dropX = p.x; },
+      up: p => { if (moved) dropX = p.x; drop(); },
+    });
+    W.crown(d => { if (state === 'play') dropX = W.clamp(dropX + d * 0.6, 0, view.w); });
+    window.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') dropX -= 8; if (e.key === 'ArrowRight') dropX += 8; if (e.key === ' ') drop(); });
+
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🍉 Fruit Merge', text: 'Drop fruit into the jar.<br>Two the same merge into a<br>bigger one. Make a 🍉!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
