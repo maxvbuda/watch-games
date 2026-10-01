@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Light Cycles</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const GW = 36, GH = 40;
+    const D = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+    let grid, bikes, me, state = 'ready', tickT = 0, wins = 0, losses = 0;
+
+    function reset() {
+      grid = new Uint8Array(GW * GH);
+      bikes = [
+        { x: 8, y: GH - 8, dir: 'up', c: '#64d2ff', alive: true, ai: false },
+        { x: GW - 9, y: 8, dir: 'down', c: '#ff9f0a', alive: true, ai: true },
+        { x: GW - 9, y: GH - 8, dir: 'left', c: '#ff375f', alive: true, ai: true },
+      ];
+      me = bikes[0];
+      bikes.forEach((b, i) => (grid[b.y * GW + b.x] = i + 1));
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `${wins}–${losses}<small>${bikes.filter(b => b.alive).length} riders</small>`; }
+    const free = (x, y) => x >= 0 && y >= 0 && x < GW && y < GH && !grid[y * GW + x];
+
+    // AI: flood-fill how much room each direction leaves, prefer the roomiest (with a little randomness).
+    function room(x, y, limit = 120) {
+      if (!free(x, y)) return 0;
+      const seen = new Set([y * GW + x]), q = [[x, y]];
+      while (q.length && seen.size < limit) {
+        const [cx, cy] = q.shift();
+        for (const [dx, dy] of Object.values(D)) { const nx = cx + dx, ny = cy + dy, k = ny * GW + nx; if (free(nx, ny) && !seen.has(k)) { seen.add(k); q.push([nx, ny]); } }
+      }
+      return seen.size;
+    }
+    function think(b) {
+      const back = Object.keys(D).find(d => D[d][0] === -D[b.dir][0] && D[d][1] === -D[b.dir][1]);
+      let best = b.dir, bs = -1;
+      for (const d of Object.keys(D)) {
+        if (d === back) continue;
+        const s = room(b.x + D[d][0], b.y + D[d][1]) + (d === b.dir ? 3 : 0) + W.rand(0, 4);
+        if (s > bs) { bs = s; best = d; }
+      }
+      b.dir = best;
+    }
+
+    function tick() {
+      for (const b of bikes) if (b.alive && b.ai) think(b);
+      const next = bikes.map(b => b.alive ? [b.x + D[b.dir][0], b.y + D[b.dir][1]] : null);
+      bikes.forEach((b, i) => {
+        if (!b.alive) return;
+        const [nx, ny] = next[i];
+        const headOn = next.some((n, j) => j !== i && n && n[0] === nx && n[1] === ny);
+        if (!free(nx, ny) || headOn) { b.alive = false; return; }
+        b.x = nx; b.y = ny; grid[ny * GW + nx] = i + 1;
+      });
+      updateHud();
+      const alive = bikes.filter(b => b.alive);
+      if (!me.alive || alive.length <= 1) {
+        state = 'over';
+        const won = me.alive;
+        if (won) { wins++; W.best('cycles', wins); } else losses++;
+        updateHud();
+        setTimeout(() => W.overlay({ title: won ? 'Last rider standing! 🏆' : 'Derezzed 💥', text: `You ${wins} – ${losses} Watch`, button: 'Again', onStart: start }), 500);
+      }
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#02040a'; ctx.fillRect(0, 0, w, h);
+      const cs = Math.min((w - 4) / GW, (h - 30) / GH), ox = (w - cs * GW) / 2, oy = h - cs * GH - 2;
+      ctx.strokeStyle = '#0a2a4a'; ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      for (let x = 0; x <= GW; x += 4) { ctx.moveTo(ox + x * cs, oy); ctx.lineTo(ox + x * cs, oy + GH * cs); }
+      for (let y = 0; y <= GH; y += 4) { ctx.moveTo(ox, oy + y * cs); ctx.lineTo(ox + GW * cs, oy + y * cs); }
+      ctx.stroke();
+      ctx.strokeStyle = '#64d2ff55'; ctx.lineWidth = 1; ctx.strokeRect(ox, oy, GW * cs, GH * cs);
+      for (let i = 0; i < GW * GH; i++) {
+        const v = grid[i];
+        if (!v) continue;
+        ctx.fillStyle = bikes[v - 1].alive ? bikes[v - 1].c : bikes[v - 1].c + '55';
+        ctx.fillRect(ox + (i % GW) * cs, oy + Math.floor(i / GW) * cs, cs + 0.3, cs + 0.3);
+      }
+      for (const b of bikes) if (b.alive) { ctx.fillStyle = '#fff'; ctx.fillRect(ox + b.x * cs - 0.5, oy + b.y * cs - 0.5, cs + 1, cs + 1); }
+    }
+
+    // Swipe to turn (no U-turns). Tapping the left/right half turns relative to your heading.
+    const LEFT = { up: 'left', left: 'down', down: 'right', right: 'up' }, RIGHT = { up: 'right', right: 'down', down: 'left', left: 'up' };
+    function turn(d) { if (state === 'play' && !(D[d][0] === -D[me.dir][0] && D[d][1] === -D[me.dir][1])) me.dir = d; }
+    W.swipe(canvas, turn, p => turn(p.x < view.w / 2 ? LEFT[me.dir] : RIGHT[me.dir]));
+    function start() { reset(); state = 'play'; tickT = -0.6; }
+    reset();
+    W.overlay({ title: '🏍️ Light Cycles', text: 'Swipe to turn, or tap left/<br>right side. Don\'t hit any<br>trail. Last rider wins!', onStart: start });
+    W.loop(dt => { if (state === 'play') { tickT += dt; while (tickT > 0.085 && state === 'play') { tickT -= 0.085; tick(); } } render(); });
+  </script>
+</body>
+</html>
