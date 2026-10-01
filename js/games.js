@@ -82,12 +82,13 @@ window.GAMES = [
   { id: 'checkers', name: 'Checkers', emoji: '👑', color: '#8b5a2b', desc: 'Jump and king vs the watch' },
   { id: 'tenseconds', name: 'Stop at 10', emoji: '⏲️', color: '#ff9f0a', desc: 'Stop the hidden timer at 10.00', unit: 's off' },
   { id: 'fishing', name: 'Fishing', emoji: '🎣', color: '#2b8fd6', desc: 'Crown reels in the catch' },
+  { id: 'chase', name: 'Ghost Chase', emoji: '👻', color: '#ffd60a', desc: 'Eat the dots, dodge ghosts' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
 window.CATEGORIES = {
   Arcade: ['snakeio', 'blobio', 'flappy', 'stack', 'dino', 'knife', 'colorswitch', 'invaders', 'fruit', 'dodge', 'cave', 'hop',
-    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt'],
+    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase'],
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers'],

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Ghost Chase</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // # wall, . dot, o power pellet, space empty
+    const MAP = [
+      '###########',
+      '#o...#...o#',
+      '#.##.#.##.#',
+      '#.........#',
+      '#.##.#.##.#',
+      '#....#....#',
+      '####.#.####',
+      '#.........#',
+      '#.##.#.##.#',
+      '#o.#...#.o#',
+      '##.#.#.#.##',
+      '#....#....#',
+      '#.##...##.#',
+      '#.........#',
+      '###########',
+    ];
+    const R = MAP.length, C = MAP[0].length;
+    const D = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+    let dots, pac, ghosts, score, lives, fright, level = 1, state = 'ready', t = 0;
+
+    const wall = (x, y) => x < 0 || y < 0 || x >= C || y >= R || MAP[y][x] === '#';
+
+    function reset(full) {
+      if (full) { score = 0; lives = 3; level = 1; }
+      dots = new Set();
+      MAP.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === '.' || ch === 'o') dots.add(x + ',' + y + ',' + ch); }));
+      place();
+    }
+    function place() {
+      pac = { x: 5, y: 13, fx: 5, fy: 13, dir: 'left', want: 'left' };
+      ghosts = [{ x: 5, y: 7, c: '#ff453a' }, { x: 4, y: 7, c: '#ff9fdb' }, { x: 6, y: 7, c: '#64d2ff' }].slice(0, Math.min(3, 1 + level)).map(g => ({ ...g, fx: g.x, fy: g.y, dir: 'up', home: { x: g.x, y: g.y } }));
+      fright = 0;
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `${score}<small>${'💛'.repeat(lives)}</small>`; }
+
+    // Everyone moves cell to cell; fx/fy interpolate for smooth drawing.
+    let pacT = 0, ghostT = 0;
+    function stepPac() {
+      if (!wall(pac.x + D[pac.want][0], pac.y + D[pac.want][1])) pac.dir = pac.want;
+      const [dx, dy] = D[pac.dir];
+      if (!wall(pac.x + dx, pac.y + dy)) { pac.x += dx; pac.y += dy; }
+      for (const k of dots) {
+        const [x, y, ch] = k.split(',');
+        if (+x === pac.x && +y === pac.y) { dots.delete(k); score += ch === 'o' ? 50 : 10; if (ch === 'o') fright = 6; updateHud(); }
+      }
+      if (!dots.size) { level++; reset(false); }
+    }
+    function stepGhost(g) {
+      const opts = Object.keys(D).filter(d => {
+        const [dx, dy] = D[d];
+        return !wall(g.x + dx, g.y + dy) && !(D[d][0] === -D[g.dir][0] && D[d][1] === -D[g.dir][1]);
+      });
+      const choices = opts.length ? opts : Object.keys(D).filter(d => !wall(g.x + D[d][0], g.y + D[d][1]));
+      // Chase (or flee when frightened), with a bit of randomness so they're beatable.
+      const score = d => { const nx = g.x + D[d][0], ny = g.y + D[d][1]; const dd = Math.abs(nx - pac.x) + Math.abs(ny - pac.y); return fright > 0 ? -dd : dd; };
+      g.dir = W.rng() < 0.25 ? W.pick(choices) : choices.sort((a, b) => score(a) - score(b))[0];
+      g.x += D[g.dir][0]; g.y += D[g.dir][1];
+    }
+    function collide() {
+      for (const g of ghosts) if (g.x === pac.x && g.y === pac.y) {
+        if (fright > 0) { score += 200; g.x = g.home.x; g.y = g.home.y; g.fx = g.x; g.fy = g.y; updateHud(); }
+        else {
+          lives--; updateHud();
+          if (lives <= 0) {
+            state = 'over';
+            const best = W.best('chase', score);
+            setTimeout(() => W.overlay({ title: 'Caught! 👻', big: score, text: `Level ${level} · best ${best}`, button: 'Again', onStart: start }), 400);
+          } else place();
+          return;
+        }
+      }
+    }
+
+    function update(dt) {
+      t += dt;
+      fright = Math.max(0, fright - dt);
+      pacT += dt; ghostT += dt;
+      const pacEvery = 0.17, ghostEvery = (fright > 0 ? 0.32 : 0.21) * Math.max(0.7, 1 - level * 0.05);
+      if (pacT >= pacEvery) { pacT = 0; stepPac(); collide(); }
+      if (ghostT >= ghostEvery) { ghostT = 0; ghosts.forEach(stepGhost); collide(); }
+      const k = Math.min(1, dt * 14);
+      for (const o of [pac, ...ghosts]) { o.fx += (o.x - o.fx) * k; o.fy += (o.y - o.fy) * k; }
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+      const cs = Math.min((w - 4) / C, (h - 30) / R), ox = (w - cs * C) / 2, oy = h - cs * R - 2;
+      ctx.fillStyle = '#1f3fbf';
+      MAP.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === '#') ctx.fillRect(ox + x * cs + 1, oy + y * cs + 1, cs - 2, cs - 2); }));
+      for (const k of dots) {
+        const [x, y, ch] = k.split(',');
+        ctx.fillStyle = '#ffd6a5';
+        ctx.beginPath(); ctx.arc(ox + (+x + 0.5) * cs, oy + (+y + 0.5) * cs, ch === 'o' ? cs * 0.28 * (0.8 + Math.sin(t * 8) * 0.2) : cs * 0.1, 0, Math.PI * 2); ctx.fill();
+      }
+      // Pac with a chomping mouth facing its direction.
+      const ang = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 }[pac.dir], mouth = 0.25 + Math.abs(Math.sin(t * 12)) * 0.35;
+      ctx.fillStyle = '#ffd60a';
+      ctx.beginPath(); ctx.moveTo(ox + (pac.fx + 0.5) * cs, oy + (pac.fy + 0.5) * cs);
+      ctx.arc(ox + (pac.fx + 0.5) * cs, oy + (pac.fy + 0.5) * cs, cs * 0.45, ang + mouth, ang + Math.PI * 2 - mouth); ctx.fill();
+      for (const g of ghosts) {
+        const x = ox + (g.fx + 0.5) * cs, y = oy + (g.fy + 0.5) * cs, r = cs * 0.44;
+        ctx.fillStyle = fright > 0 ? (fright < 2 && Math.floor(t * 6) % 2 ? '#fff' : '#3a3aff') : g.c;
+        ctx.beginPath(); ctx.arc(x, y - r * 0.1, r, Math.PI, 0); ctx.lineTo(x + r, y + r * 0.8);
+        for (let k = 0; k < 4; k++) ctx.lineTo(x + r - (k + 0.5) * r / 2, y + r * (k % 2 ? 0.8 : 0.5));
+        ctx.lineTo(x - r, y + r * 0.8); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x - r * 0.35, y - r * 0.15, r * 0.25, 0, 7); ctx.arc(x + r * 0.35, y - r * 0.15, r * 0.25, 0, 7); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.1, r * 0.11, 0, 7); ctx.arc(x + r * 0.4, y - r * 0.1, r * 0.11, 0, 7); ctx.fill();
+      }
+    }
+
+    W.swipe(canvas, d => { if (state === 'play') pac.want = d; });
+    function start() { reset(true); state = 'play'; }
+    reset(true);
+    W.overlay({ title: '👻 Ghost Chase', text: 'Swipe to steer. Eat every dot.<br>Big dots let you eat ghosts!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(); });
+  </script>
+</body>
+</html>
