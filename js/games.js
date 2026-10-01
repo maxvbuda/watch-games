@@ -90,12 +90,13 @@ window.GAMES = [
   { id: 'bubblewrap', name: 'Bubble Wrap', emoji: '🫧', color: '#64d2ff', desc: 'Pop, pop, pop — forever' },
   { id: 'tugofwar', name: 'Tug of War', emoji: '💪', color: '#4caf50', desc: 'Out-tap the robots' },
   { id: 'rhythm', name: 'Rhythm Tap', emoji: '🎵', color: '#ff375f', desc: 'Tap the lanes on the beat' },
+  { id: 'dash', name: 'Dash', emoji: '🟨', color: '#ffd60a', desc: 'Jump spikes, land on blocks' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
 window.CATEGORIES = {
   Arcade: ['snakeio', 'blobio', 'flappy', 'stack', 'dino', 'knife', 'colorswitch', 'invaders', 'fruit', 'dodge', 'cave', 'hop',
-    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase', 'cycles', 'tugofwar', 'rhythm'],
+    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase', 'cycles', 'tugofwar', 'rhythm', 'dash'],
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes', 'gems'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds', 'capitals'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers'],
