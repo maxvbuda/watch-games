@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Hole.io</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>.hud { text-shadow: 0 1px 3px #000, 0 0 2px #000; }</style>
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const WORLD = 1300, BLOCK = 130, ROAD = 26, TIME = 120, GROW = 0.13;   // GROW: share of a swallowed area added to the hole
+    // Things to swallow, smallest to biggest: [emoji, size, points]
+    const KINDS = [['🧍', 5, 1], ['🌷', 5, 1], ['🌳', 9, 2], ['🛵', 8, 2], ['🚗', 11, 4], ['🚙', 12, 5], ['🚌', 16, 9], ['🏠', 20, 14], ['⛪️', 24, 20], ['🏢', 30, 30], ['🏬', 36, 40], ['🏰', 44, 60]];
+    const HOLE_COLORS = ['#30d158', '#ff453a', '#ffd60a', '#bf5af2'];
+    const NAMES = ['You', 'Abyss', 'Vortex', 'Muncher'];
+    let objs, holes, me, timeLeft, state = 'ready', steer = null, cam = { x: 0, y: 0, z: 1 }, swallowing = [], popups = [];
+
+    function buildCity() {
+      objs = [];
+      for (let bx = 0; bx < WORLD; bx += BLOCK) for (let by = 0; by < WORLD; by += BLOCK) {
+        const park = W.rng() < 0.18;
+        // Inside each block: a few buildings or a park with trees; people and cars on the roads.
+        const inner = { x: bx + ROAD, y: by + ROAD, w: BLOCK - ROAD * 1.4, h: BLOCK - ROAD * 1.4 };
+        if (park) for (let k = 0; k < 9; k++) objs.push(make(W.pick([1, 2, 2, 0]), inner.x + W.rand(0, inner.w), inner.y + W.rand(0, inner.h)));
+        else {
+          const big = W.pick([7, 7, 8, 9, 9, 10, 10, 11]);
+          objs.push(make(big, inner.x + inner.w * 0.5, inner.y + inner.h * 0.5));
+          for (let k = 0; k < 3; k++) objs.push(make(W.pick([7, 2, 0, 1]), inner.x + W.rand(0, inner.w), inner.y + W.rand(0, inner.h)));
+        }
+        for (let k = 0; k < 4; k++) objs.push(make(W.pick([0, 0, 3, 4, 5, 6]), bx + W.rand(4, ROAD - 4), by + W.rand(0, BLOCK)));
+        for (let k = 0; k < 4; k++) objs.push(make(W.pick([0, 0, 3, 4, 5, 6]), bx + W.rand(0, BLOCK), by + W.rand(4, ROAD - 4)));
+      }
+    }
+    function make(k, x, y) { return { k, x, y, e: KINDS[k][0], s: KINDS[k][1], pts: KINDS[k][2], gone: false }; }
+
+    function reset() {
+      buildCity();
+      holes = NAMES.map((name, i) => ({ name, color: HOLE_COLORS[i], x: i === 0 ? WORLD / 2 : W.rand(150, WORLD - 150), y: i === 0 ? WORLD / 2 : W.rand(150, WORLD - 150), r: 11, score: 0, ai: i > 0, dir: W.rand(0, 6.28), thinkT: 0, vx: 0, vy: 0 }));
+      me = holes[0]; timeLeft = TIME; steer = null; swallowing = []; popups = [];
+      cam = { x: me.x, y: me.y, z: 1 };
+    }
+
+    const speedOf = h => 70 + 30 / (1 + h.r / 40);
+    function think(h) {
+      // AI: chase the juiciest thing it can eat nearby, run from bigger holes.
+      let tx = null, ty = null, best = -1;
+      for (const o of holes) if (o !== h && o.r > h.r * 1.15 && Math.hypot(o.x - h.x, o.y - h.y) < o.r + 90) { h.dir = Math.atan2(h.y - o.y, h.x - o.x); return; }
+      for (const o of objs) {
+        if (o.gone || o.s > h.r * 0.9) continue;
+        const d = Math.hypot(o.x - h.x, o.y - h.y);
+        if (d > 220) continue;
+        const v = o.pts / (d + 30);
+        if (v > best) { best = v; tx = o.x; ty = o.y; }
+      }
+      for (const o of holes) if (o !== h && h.r > o.r * 1.2) { const d = Math.hypot(o.x - h.x, o.y - h.y); if (d < 180 && 4 / (d + 30) > best) { best = 4 / (d + 30); tx = o.x; ty = o.y; } }
+      h.dir = tx === null ? h.dir + W.rand(-0.6, 0.6) : Math.atan2(ty - h.y, tx - h.x);
+    }
+
+    function eat(h, pts, area) {
+      h.r = Math.sqrt(h.r * h.r + area * GROW);
+      h.score += pts;
+    }
+
+    function update(dt) {
+      timeLeft -= dt;
+      for (const h of holes) {
+        let ux = 0, uy = 0;
+        if (h.ai) { h.thinkT -= dt; if (h.thinkT <= 0) { think(h); h.thinkT = W.rand(0.2, 0.5); } ux = Math.cos(h.dir); uy = Math.sin(h.dir); }
+        else if (steer) { ux = steer.x; uy = steer.y; }
+        const sp = speedOf(h);
+        h.vx += (ux * sp - h.vx) * Math.min(1, dt * 6); h.vy += (uy * sp - h.vy) * Math.min(1, dt * 6);
+        h.x = W.clamp(h.x + h.vx * dt, h.r, WORLD - h.r); h.y = W.clamp(h.y + h.vy * dt, h.r, WORLD - h.r);
+        // Swallow anything small enough whose centre is over the hole.
+        for (const o of objs) {
+          if (o.gone || o.s > h.r * 0.9) continue;
+          const dx = o.x - h.x, dy = o.y - h.y;
+          if (dx * dx + dy * dy < (h.r * 0.85) ** 2) {
+            o.gone = true; eat(h, o.pts, o.s * o.s);
+            swallowing.push({ o, h, t: 0.4 });
+            if (h === me) { W.sfx(300 + o.s * 12, { type: 'triangle', dur: 0.07, vol: 0.05, slide: 120 }); if (o.pts >= 14) popups.push({ x: o.x, y: o.y, txt: '+' + o.pts, t: 0.8 }); }
+          }
+        }
+      }
+      // Holes eat smaller holes; eaten holes respawn tiny elsewhere.
+      for (const a of holes) for (const b of holes) {
+        if (a === b || a.r < b.r * 1.2) continue;
+        if (Math.hypot(a.x - b.x, a.y - b.y) < a.r - b.r * 0.4) {
+          eat(a, Math.round(b.score / 2) + 10, b.r * b.r);
+          if (b === me) W.sfx(160, { type: 'sawtooth', dur: 0.4, vol: 0.1, slide: 50 });
+          popups.push({ x: b.x, y: b.y, txt: `${a.name} ate ${b.name}!`, t: 1.4 });
+          b.r = 11; b.score = Math.floor(b.score / 2); b.x = W.rand(100, WORLD - 100); b.y = W.rand(100, WORLD - 100);
+        }
+      }
+      // Slowly respawn small stuff on the roads so the city never runs dry.
+      if (W.rng() < dt * 3) { const bx = Math.floor(W.rng() * WORLD / BLOCK) * BLOCK; objs.push(make(W.pick([0, 3, 4, 5]), bx + W.rand(4, ROAD - 4), W.rand(0, WORLD))); }
+      if (objs.length > 2000) objs = objs.filter(o => !o.gone);
+      const rank = [...holes].sort((a, b) => b.r - a.r).indexOf(me) + 1;
+      hud.innerHTML = `${Math.ceil(timeLeft)}s<small>#${rank} · size ${Math.round(me.r)}</small>`;
+      if (timeLeft <= 0) {
+        state = 'over';
+        const order = [...holes].sort((a, b) => b.r - a.r), place = order.indexOf(me) + 1;
+        const best = W.best('holeio', me.score);
+        W.overlay({ title: place === 1 ? '🏆 Biggest hole!' : `#${place} of 4`, big: me.score, text: order.map((h, i) => `${i + 1}. ${h.name} (${Math.round(h.r)})`).join('<br>') + `<br>best ${best}`, button: 'Again', onStart: start });
+      }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      cam.z += (Math.min(w, h) / (160 + me.r * 4.2) - cam.z) * Math.min(1, dt * 2);
+      cam.x += (me.x - cam.x) * Math.min(1, dt * 8); cam.y += (me.y - cam.y) * Math.min(1, dt * 8);
+      const hw = w / 2 / cam.z, hh = h / 2 / cam.z;
+      ctx.fillStyle = '#5a5a60'; ctx.fillRect(0, 0, w, h);
+      ctx.save();
+      ctx.translate(w / 2, h / 2); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -cam.y);
+      // City blocks (sidewalks) on asphalt, with lane dashes.
+      for (let bx = Math.floor((cam.x - hw) / BLOCK) * BLOCK; bx < cam.x + hw; bx += BLOCK) for (let by = Math.floor((cam.y - hh) / BLOCK) * BLOCK; by < cam.y + hh; by += BLOCK) {
+        if (bx < 0 || by < 0 || bx >= WORLD || by >= WORLD) continue;
+        ctx.fillStyle = '#c9c4b8'; ctx.fillRect(bx + ROAD, by + ROAD, BLOCK - ROAD, BLOCK - ROAD);
+        ctx.fillStyle = '#9bd17a'; ctx.fillRect(bx + ROAD + 3, by + ROAD + 3, BLOCK - ROAD - 6, BLOCK - ROAD - 6);
+        ctx.fillStyle = '#ffffffaa';
+        for (let k = 6; k < BLOCK; k += 18) { ctx.fillRect(bx + ROAD / 2 - 0.5, by + k, 1, 8); ctx.fillRect(bx + k, by + ROAD / 2 - 0.5, 8, 1); }
+      }
+      ctx.strokeStyle = '#ff453a'; ctx.lineWidth = 4; ctx.strokeRect(0, 0, WORLD, WORLD);
+      // Holes first (they're in the ground), then objects on top.
+      for (const ho of holes) {
+        ctx.fillStyle = ho.color; ctx.beginPath(); ctx.ellipse(ho.x, ho.y, ho.r + 2.5, ho.r + 2.5, 0, 0, 7); ctx.fill();
+        const g = ctx.createRadialGradient(ho.x, ho.y, ho.r * 0.2, ho.x, ho.y, ho.r);
+        g.addColorStop(0, '#000'); g.addColorStop(1, '#151520');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ho.x, ho.y, ho.r, 0, 7); ctx.fill();
+        if (ho.r * cam.z > 14) { ctx.fillStyle = '#fff'; ctx.font = `700 ${Math.max(6, ho.r * 0.32)}px -apple-system, system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ho.name, ho.x, ho.y); }
+      }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#000';
+      for (const o of objs) {
+        if (o.gone || Math.abs(o.x - cam.x) > hw + 40 || Math.abs(o.y - cam.y) > hh + 50) continue;
+        ctx.font = `${Math.round(o.s * 2)}px sans-serif`;
+        ctx.fillText(o.e, o.x, o.y + o.s * 0.6);
+      }
+      // Swallow animation: shrink and spin into the hole's centre.
+      for (const s of swallowing) {
+        s.t -= dt;
+        const k = Math.max(0, s.t / 0.4), x = s.h.x + (s.o.x - s.h.x) * k, y = s.h.y + (s.o.y - s.h.y) * k;
+        ctx.save(); ctx.translate(x, y); ctx.rotate((1 - k) * 4); ctx.globalAlpha = k;
+        ctx.font = `${Math.max(1, Math.round(s.o.s * 2 * k))}px sans-serif`; ctx.fillText(s.o.e, 0, s.o.s * 0.6 * k);
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+      swallowing = swallowing.filter(s => s.t > 0);
+      for (const p of popups) { p.t -= dt; p.y -= 20 * dt; ctx.globalAlpha = Math.min(1, p.t * 2); ctx.fillStyle = '#fff'; ctx.font = `800 ${12 / cam.z}px -apple-system, system-ui`; ctx.fillText(p.txt, p.x, p.y); }
+      ctx.globalAlpha = 1;
+      popups = popups.filter(p => p.t > 0);
+      ctx.restore();
+    }
+
+    function setSteer(p) {
+      const dx = p.x - view.w / 2, dy = p.y - view.h / 2, d = Math.hypot(dx, dy);
+      steer = d < 4 ? null : { x: (dx / d) * Math.min(1, d / (view.w * 0.3)), y: (dy / d) * Math.min(1, d / (view.w * 0.3)) };
+    }
+    W.pointer(canvas, { down: setSteer, move: setSteer, hover: true });
+    W.crown(d => {
+      if (state !== 'play') return;
+      const cur = steer ? Math.atan2(steer.y, steer.x) : (me.vx || me.vy) ? Math.atan2(me.vy, me.vx) : -Math.PI / 2;
+      const a = cur + d * 0.006; steer = { x: Math.cos(a), y: Math.sin(a) };
+    });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🕳️ Hole.io', text: 'Steer your hole (touch or<br>Crown). Swallow the city,<br>be the biggest in 2 minutes!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
