@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Ice Slide</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>.back { background: rgba(0, 0, 0, 0.35); } .hud { color: #000; text-shadow: 0 0 3px #fff; }</style>
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // On ice you slide until you hit a rock or the edge. Reach the igloo! Each level is checked solvable.
+    const D = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+    let N, rocks, pos, goal, moves, par, level = 1, draw, won;
+
+    function slide(p, [dx, dy]) {
+      let [x, y] = p;
+      while (true) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= N || ny >= N || rocks.has(nx + ',' + ny)) return [x, y];
+        x = nx; y = ny;
+        if (x === goal[0] && y === goal[1]) return [x, y];   // you stop on the igloo
+      }
+    }
+    function solve() {
+      const key = p => p.join(','), seen = new Map([[key(pos), 0]]), q = [pos];
+      while (q.length) {
+        const p = q.shift(), d = seen.get(key(p));
+        if (p[0] === goal[0] && p[1] === goal[1]) return d;
+        for (const dir of Object.values(D)) { const n = slide(p, dir); if (!seen.has(key(n))) { seen.set(key(n), d + 1); q.push(n); } }
+      }
+      return -1;
+    }
+    function newLevel() {
+      N = Math.min(6 + Math.floor(level / 3), 10);
+      const minMoves = Math.min(3 + Math.floor(level / 2), 9);
+      for (let tries = 0; tries < 500; tries++) {
+        rocks = new Set();
+        const count = Math.floor(N * N * 0.16);
+        while (rocks.size < count) rocks.add(W.randInt(0, N - 1) + ',' + W.randInt(0, N - 1));
+        pos = [W.randInt(0, N - 1), W.randInt(0, N - 1)]; goal = [W.randInt(0, N - 1), W.randInt(0, N - 1)];
+        if (rocks.has(pos.join(',')) || rocks.has(goal.join(',')) || pos.join() === goal.join()) continue;
+        par = solve();
+        if (par >= minMoves) break;
+      }
+      draw = [...pos]; moves = 0; won = false; updateHud();
+    }
+    function updateHud() { hud.innerHTML = `L${level}<small>${moves} moves · par ${par}</small>`; }
+    function move(d) {
+      if (won) return;
+      const n = slide(pos, D[d]);
+      if (n[0] === pos[0] && n[1] === pos[1]) return;
+      pos = n; moves++; updateHud();
+      if (pos[0] === goal[0] && pos[1] === goal[1]) {
+        won = true; W.best('iceslide', level);
+        setTimeout(() => W.overlay({ title: moves <= par ? 'Perfect! ⭐️' : 'Made it! 🐧', big: moves + ' moves', text: `Par ${par}`, button: 'Next level', onStart: () => { level++; newLevel(); } }), 400);
+      }
+    }
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#dff3ff'; ctx.fillRect(0, 0, w, h);
+      const s = Math.min((w - 6) / N, (h - 34) / N), ox = (w - s * N) / 2, oy = h - s * N - 3;
+      ctx.fillStyle = '#bfe6ff'; ctx.fillRect(ox, oy, s * N, s * N);
+      ctx.strokeStyle = '#ffffff88'; ctx.lineWidth = 1;
+      for (let i = 0; i <= N; i++) { ctx.beginPath(); ctx.moveTo(ox + i * s, oy); ctx.lineTo(ox + i * s, oy + N * s); ctx.moveTo(ox, oy + i * s); ctx.lineTo(ox + N * s, oy + i * s); ctx.stroke(); }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.font = `${Math.round(s * 0.8)}px sans-serif`;
+      for (const r of rocks) { const [x, y] = r.split(',').map(Number); ctx.fillText('🪨', ox + (x + 0.5) * s, oy + (y + 0.55) * s); }
+      ctx.fillText('🛖', ox + (goal[0] + 0.5) * s, oy + (goal[1] + 0.55) * s);
+      draw[0] += (pos[0] - draw[0]) * Math.min(1, dt * 12); draw[1] += (pos[1] - draw[1]) * Math.min(1, dt * 12);
+      ctx.fillText('🐧', ox + (draw[0] + 0.5) * s, oy + (draw[1] + 0.55) * s);
+    }
+    W.swipe(canvas, move);
+    newLevel();
+    W.overlay({ title: '🐧 Ice Slide', text: 'Swipe to slide. You only stop<br>at rocks or the edge. Reach<br>the igloo in par moves!', onStart() {} });
+    W.loop(render);
+  </script>
+</body>
+</html>
