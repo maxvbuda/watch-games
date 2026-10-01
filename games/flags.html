@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Flag Quiz</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 30px 6px max(6px, env(safe-area-inset-bottom)); gap: 5px; }
+    #q { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    #flag { font-size: 64px; line-height: 1; }
+    #country { font-size: 15px; font-weight: 800; margin-top: 3px; }
+    #opts { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+    #opts button { border: 0; border-radius: 12px; background: #2c2c2e; color: #fff; font: inherit; font-size: 12px; font-weight: 700; padding: 9px 4px; }
+    #opts button.ok { background: #30d158; color: #000; }
+    #opts button.bad { background: #ff453a; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="q"><div id="flag"></div><div id="country"></div></div><div id="opts"></div></div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const DATA = [
+      ['🇫🇷', 'France', 'Paris'], ['🇩🇪', 'Germany', 'Berlin'], ['🇮🇹', 'Italy', 'Rome'], ['🇪🇸', 'Spain', 'Madrid'], ['🇬🇧', 'UK', 'London'],
+      ['🇯🇵', 'Japan', 'Tokyo'], ['🇨🇳', 'China', 'Beijing'], ['🇮🇳', 'India', 'New Delhi'], ['🇺🇸', 'USA', 'Washington'], ['🇨🇦', 'Canada', 'Ottawa'],
+      ['🇲🇽', 'Mexico', 'Mexico City'], ['🇧🇷', 'Brazil', 'Brasília'], ['🇦🇷', 'Argentina', 'Buenos Aires'], ['🇦🇺', 'Australia', 'Canberra'], ['🇳🇿', 'New Zealand', 'Wellington'],
+      ['🇷🇺', 'Russia', 'Moscow'], ['🇪🇬', 'Egypt', 'Cairo'], ['🇿🇦', 'South Africa', 'Pretoria'], ['🇳🇬', 'Nigeria', 'Abuja'], ['🇰🇪', 'Kenya', 'Nairobi'],
+      ['🇹🇷', 'Turkey', 'Ankara'], ['🇬🇷', 'Greece', 'Athens'], ['🇵🇹', 'Portugal', 'Lisbon'], ['🇳🇱', 'Netherlands', 'Amsterdam'], ['🇧🇪', 'Belgium', 'Brussels'],
+      ['🇸🇪', 'Sweden', 'Stockholm'], ['🇳🇴', 'Norway', 'Oslo'], ['🇫🇮', 'Finland', 'Helsinki'], ['🇩🇰', 'Denmark', 'Copenhagen'], ['🇵🇱', 'Poland', 'Warsaw'],
+      ['🇦🇹', 'Austria', 'Vienna'], ['🇨🇭', 'Switzerland', 'Bern'], ['🇮🇪', 'Ireland', 'Dublin'], ['🇰🇷', 'South Korea', 'Seoul'], ['🇹🇭', 'Thailand', 'Bangkok'],
+      ['🇻🇳', 'Vietnam', 'Hanoi'], ['🇮🇩', 'Indonesia', 'Jakarta'], ['🇵🇭', 'Philippines', 'Manila'], ['🇸🇦', 'Saudi Arabia', 'Riyadh'], ['🇮🇷', 'Iran', 'Tehran'],
+      ['🇵🇰', 'Pakistan', 'Islamabad'], ['🇨🇴', 'Colombia', 'Bogotá'], ['🇵🇪', 'Peru', 'Lima'], ['🇨🇱', 'Chile', 'Santiago'], ['🇨🇺', 'Cuba', 'Havana'],
+      ['🇲🇦', 'Morocco', 'Rabat'], ['🇪🇹', 'Ethiopia', 'Addis Ababa'], ['🇬🇭', 'Ghana', 'Accra'], ['🇺🇦', 'Ukraine', 'Kyiv'], ['🇨🇿', 'Czechia', 'Prague'],
+      ['🇭🇺', 'Hungary', 'Budapest'], ['🇮🇸', 'Iceland', 'Reykjavík'], ['🇯🇲', 'Jamaica', 'Kingston'], ['🇸🇬', 'Singapore', 'Singapore'], ['🇲🇾', 'Malaysia', 'Kuala Lumpur'],
+    ];
+    const $ = id => document.getElementById(id);
+    let cur, score, lives, busy, order;
+
+    function next() {
+      cur = order.pop() || (order = W.shuffle([...DATA]), order.pop());
+      $('flag').textContent = cur[0]; $('country').textContent = 'Which country?';
+      const opts = new Set([cur[1]]);
+      while (opts.size < 4) opts.add(W.pick(DATA)[1]);
+      $('opts').innerHTML = '';
+      W.shuffle([...opts]).forEach(c => {
+        const b = document.createElement('button');
+        b.textContent = c;
+        b.addEventListener('click', () => answer(b, c));
+        $('opts').appendChild(b);
+      });
+      busy = false;
+    }
+    function answer(b, c) {
+      if (busy) return;
+      busy = true;
+      const ok = c === cur[1];
+      b.className = ok ? 'ok' : 'bad';
+      if (!ok) { lives--; [...$('opts').children].find(x => x.textContent === cur[1]).className = 'ok'; } else score++;
+      hud.innerHTML = `${score}<small>${'❤️'.repeat(lives)}</small>`;
+      if (lives <= 0) {
+        const best = W.best('flags', score);
+        setTimeout(() => W.overlay({ title: 'Quiz over 🏳️', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 900);
+      } else setTimeout(next, ok ? 450 : 1100);
+    }
+    const hud = $('hud');
+    function start() { score = 0; lives = 3; order = W.shuffle([...DATA]); hud.innerHTML = `0<small>❤️❤️❤️</small>`; next(); }
+    start();
+  </script>
+</body>
+</html>
