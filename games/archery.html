@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Archery</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const ARROWS = 6;
+    // Side view: set the angle with the Crown (or drag), hold to draw the bow, release to shoot. Mind the wind.
+    let angle, power, drawing, arrow, stuck, target, wind, score, left, state = 'ready', msg = '', msgT = 0;
+    const G = () => view.h * 0.9, ARCHER = () => ({ x: 20, y: view.h * 0.72 });
+
+    function newShot() {
+      target = { x: view.w * W.rand(0.7, 0.92), y: view.h * W.rand(0.35, 0.7), r: view.h * 0.09 };
+      wind = W.rand(-1, 1) * view.w * 0.15; arrow = null; power = 0; drawing = false;
+    }
+    function reset() { angle = -0.5; score = 0; left = ARROWS; stuck = []; newShot(); updateHud(); }
+    function updateHud() { hud.innerHTML = `${score}<small>🏹×${left}</small>`; }
+    function release() {
+      if (!drawing || arrow) return;
+      drawing = false;
+      const sp = view.w * (0.6 + power * 1.4), a = ARCHER();
+      arrow = { x: a.x + 10, y: a.y - 8, vx: Math.cos(angle) * sp, vy: Math.sin(angle) * sp };
+      left--; updateHud();
+    }
+    function update(dt) {
+      if (drawing) power = Math.min(1, power + dt * 0.9);
+      if (!arrow) return;
+      arrow.vx += wind * dt; arrow.vy += G() * dt;
+      arrow.x += arrow.vx * dt; arrow.y += arrow.vy * dt;
+      // Target is a vertical board facing you; score by height distance from its centre.
+      if (arrow.x >= target.x && arrow.x - arrow.vx * dt < target.x + 1 && Math.abs(arrow.y - target.y) < target.r) {
+        const d = Math.abs(arrow.y - target.y) / target.r, pts = d < 0.15 ? 10 : d < 0.4 ? 7 : d < 0.7 ? 4 : 1;
+        score += pts; msg = pts === 10 ? 'BULLSEYE! 🎯' : `+${pts}`; msgT = 1;
+        stuck.push({ x: target.x, y: arrow.y, a: Math.atan2(arrow.vy, arrow.vx), tx: target });
+        return done();
+      }
+      if (arrow.y > view.h - 10 || arrow.x > view.w + 20) { msg = 'Miss'; msgT = 0.8; done(); }
+    }
+    function done() {
+      arrow = null; updateHud();
+      if (left <= 0) { state = 'over'; const best = W.best('archery', score); setTimeout(() => W.overlay({ title: 'Quiver empty!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 700); }
+      else setTimeout(() => { stuck = []; newShot(); }, 800);
+    }
+    function render(dt) {
+      const { w, h } = view;
+      const sky = ctx.createLinearGradient(0, 0, 0, h); sky.addColorStop(0, '#7ec8f2'); sky.addColorStop(1, '#d6f0ff');
+      ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#5aa04a'; ctx.fillRect(0, h - 10, w, 10);
+      // Wind flag.
+      ctx.fillStyle = '#000'; ctx.font = '700 10px -apple-system, system-ui'; ctx.textAlign = 'center';
+      ctx.fillText(`wind ${wind > 0 ? '→' : '←'} ${Math.abs(wind / view.w * 10).toFixed(1)}`, w / 2, 40);
+      // Target board.
+      const t = target;
+      ctx.fillStyle = '#8b5a2b'; ctx.fillRect(t.x + 2, t.y, 3, h - 10 - t.y);
+      ['#fff', '#000', '#0a84ff', '#ff453a', '#ffd60a'].forEach((c, i) => { ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(t.x, t.y, 4, t.r * (1 - i * 0.2), 0, 0, 7); ctx.fill(); });
+      for (const s of stuck) { ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x - Math.cos(s.a) * 16, s.y - Math.sin(s.a) * 16); ctx.stroke(); }
+      // Archer + aim line.
+      const a = ARCHER();
+      ctx.font = '22px sans-serif'; ctx.textBaseline = 'middle'; ctx.fillText('🧍', a.x, a.y);
+      ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(a.x + 6, a.y - 8, 10, angle - 1.1, angle + 1.1); ctx.stroke();
+      if (!arrow && state === 'play') {
+        ctx.strokeStyle = '#0006'; ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(a.x + 10, a.y - 8); ctx.lineTo(a.x + 10 + Math.cos(angle) * 40, a.y - 8 + Math.sin(angle) * 40); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#0003'; ctx.fillRect(8, h - 24, 50, 6); ctx.fillStyle = power > 0.8 ? '#ff453a' : '#30d158'; ctx.fillRect(8, h - 24, 50 * power, 6);
+      }
+      if (arrow) { const an = Math.atan2(arrow.vy, arrow.vx); ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(arrow.x, arrow.y); ctx.lineTo(arrow.x - Math.cos(an) * 16, arrow.y - Math.sin(an) * 16); ctx.stroke(); }
+      if (msgT > 0) { msgT -= dt; ctx.globalAlpha = Math.min(1, msgT * 3); ctx.fillStyle = '#000'; ctx.font = '800 15px -apple-system, system-ui'; ctx.fillText(msg, w / 2, h * 0.22); ctx.globalAlpha = 1; }
+    }
+    const setAngle = v => (angle = W.clamp(v, -1.35, 0.2));
+    W.crown(d => { if (!arrow) setAngle(angle + d * 0.005); });
+    let s0 = null;
+    W.pointer(canvas, {
+      down: p => { if (state === 'play' && !arrow) { drawing = true; power = 0; s0 = p; } },
+      move: p => { if (drawing && s0) { setAngle(angle + (p.y - s0.y) * 0.01); s0 = p; } },
+      up: release,
+    });
+    window.addEventListener('keydown', e => { if (e.key === ' ' && !drawing) { drawing = true; power = 0; } if (e.key === 'ArrowUp') setAngle(angle - 0.05); if (e.key === 'ArrowDown') setAngle(angle + 0.05); });
+    window.addEventListener('keyup', e => { if (e.key === ' ') release(); });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🏹 Archery', text: 'Crown (or drag) aims. Hold<br>to draw, release to shoot.<br>6 arrows — watch the wind!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
