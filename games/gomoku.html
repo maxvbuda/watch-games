@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Five in a Row</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const N = 9;
+    // Gomoku on a 9×9 board: get five in a row (any direction) before the watch.
+    let b, over, last, tally = { w: 0, l: 0 }, busy;
+    const DIRS = [[1, 0], [0, 1], [1, 1], [1, -1]];
+    const at = (x, y) => (x >= 0 && y >= 0 && x < N && y < N ? b[y * N + x] : -1);
+
+    function lineLen(x, y, p, dx, dy) { let n = 1; for (const s of [1, -1]) { let k = 1; while (at(x + dx * k * s, y + dy * k * s) === p) { n++; k++; } } return n; }
+    function wins(x, y, p) { return DIRS.some(([dx, dy]) => lineLen(x, y, p, dx, dy) >= 5); }
+
+    // Score a cell for player p: longer open runs are worth exponentially more.
+    function cellScore(x, y, p) {
+      let s = 0;
+      for (const [dx, dy] of DIRS) {
+        let n = 1, open = 0;
+        for (const sg of [1, -1]) { let k = 1; while (at(x + dx * k * sg, y + dy * k * sg) === p) { n++; k++; } if (at(x + dx * k * sg, y + dy * k * sg) === 0) open++; }
+        if (n >= 5) s += 100000; else if (open) s += Math.pow(10, n) * open;
+      }
+      return s;
+    }
+    function aiMove() {
+      let best = null, bs = -1;
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        if (b[y * N + x]) continue;
+        const s = cellScore(x, y, 2) * 1.1 + cellScore(x, y, 1) + (4 - Math.abs(x - 4) - Math.abs(y - 4)) * 0.5 + W.rand(0, 3);
+        if (s > bs) { bs = s; best = [x, y]; }
+      }
+      return best;
+    }
+    function place(x, y, p) {
+      b[y * N + x] = p; last = [x, y];
+      if (wins(x, y, p)) return finish(p);
+      if (!b.includes(0)) return finish(0);
+      if (p === 1) { busy = true; updateHud(); setTimeout(() => { busy = false; const [ax, ay] = aiMove(); place(ax, ay, 2); updateHud(); }, 300); }
+    }
+    function finish(p) {
+      over = true;
+      if (p === 1) { tally.w++; W.best('gomoku', tally.w); } else if (p === 2) tally.l++;
+      updateHud();
+      setTimeout(() => W.overlay({ title: p === 1 ? 'Five in a row! 🎉' : p === 2 ? 'Watch wins 🤖' : 'Draw', text: `You ${tally.w} – ${tally.l} Watch`, button: 'Again', onStart: start }), 700);
+    }
+    function updateHud() { hud.innerHTML = `${tally.w}–${tally.l}<small>${over ? '' : busy ? 'thinking…' : 'your turn'}</small>`; }
+    function geo() { const s = Math.min((view.w - 8) / N, (view.h - 36) / N); return { s, ox: (view.w - s * N) / 2, oy: view.h - s * N - 3 }; }
+    function tap(p) {
+      if (over || busy) return;
+      const { s, ox, oy } = geo(), x = Math.floor((p.x - ox) / s), y = Math.floor((p.y - oy) / s);
+      if (at(x, y) === 0) place(x, y, 1);
+    }
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+      const { s, ox, oy } = geo();
+      ctx.fillStyle = '#d9a95b'; ctx.fillRect(ox, oy, s * N, s * N);
+      ctx.strokeStyle = '#7a5226'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i < N; i++) { ctx.moveTo(ox + s / 2, oy + (i + 0.5) * s); ctx.lineTo(ox + (N - 0.5) * s, oy + (i + 0.5) * s); ctx.moveTo(ox + (i + 0.5) * s, oy + s / 2); ctx.lineTo(ox + (i + 0.5) * s, oy + (N - 0.5) * s); }
+      ctx.stroke();
+      for (let i = 0; i < N * N; i++) {
+        if (!b[i]) continue;
+        const x = ox + (i % N + 0.5) * s, y = oy + (Math.floor(i / N) + 0.5) * s;
+        ctx.fillStyle = b[i] === 1 ? '#111' : '#f5f5f5'; ctx.beginPath(); ctx.arc(x, y, s * 0.42, 0, Math.PI * 2); ctx.fill();
+        if (last && i === last[1] * N + last[0]) { ctx.fillStyle = '#ff453a'; ctx.beginPath(); ctx.arc(x, y, s * 0.12, 0, Math.PI * 2); ctx.fill(); }
+      }
+    }
+    W.pointer(canvas, { down: tap });
+    function start() { b = new Array(N * N).fill(0); over = false; busy = false; last = null; updateHud(); }
+    start();
+    W.overlay({ title: '⚫ Five in a Row', text: 'You are black. Get five in a<br>row — across, down or<br>diagonal — before the watch!', onStart() {} });
+    W.loop(render);
+  </script>
+</body>
+</html>
