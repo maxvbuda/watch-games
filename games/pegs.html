@@ -77,7 +77,7 @@
     }
     let s0 = null;
     W.pointer(canvas, { down: p => (s0 = p), up: p => { if (!s0) return; if (p.y - s0.y > 30 && history.length) { pegs = history.pop(); sel = null; updateHud(); } else if (Math.abs(p.y - s0.y) < 15) tap(s0); s0 = null; } });
-    function start() { pegs = holes.map((_, i) => i !== W.pick([0, 3, 4, 12])); sel = null; history = []; updateHud(); }
+    function start() { const empty = W.pick([0, 3, 4, 12]); pegs = holes.map((_, i) => i !== empty); sel = null; history = []; updateHud(); }
     start();
     W.overlay({ title: '📍 Peg Solitaire', text: 'Tap a peg, then an empty hole<br>2 away to jump. Leave only<br>one peg to be a genius!', onStart() {} });
     W.loop(render);
