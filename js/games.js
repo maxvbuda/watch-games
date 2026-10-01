@@ -127,6 +127,7 @@ window.GAMES = [
   { id: 'survivor', name: 'Survivor', emoji: '🧙', color: '#30d158', desc: 'Auto-battle hordes, level up, survive 5 min' },
   { id: 'railrunner', name: 'Rail Runner', emoji: '🚆', color: '#ff453a', desc: '3D endless runner — swipe or Crown' },
   { id: 'hillracer', name: 'Hill Racer', emoji: '🚙', color: '#ff453a', desc: 'Physics hill climb — Crown is the gas pedal' },
+  { id: 'pool', name: 'Pool', emoji: '🎱', color: '#1f8f4a', desc: 'Pot balls vs the watch' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
@@ -136,7 +137,7 @@ window.CATEGORIES = {
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes', 'gems', 'ballsort', 'pegs', 'dropmerge', 'tiletrio', 'iceslide', 'fruitmerge', 'blockblast'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds', 'capitals', 'timestables', 'oddone', 'digitspan', 'wordsearch', 'memorygrid', 'flags'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers', 'dicepoker', 'gomoku'],
-  Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty', 'homerun', 'papertoss', 'skeeball', 'slalom', 'keepyuppy', 'squash', 'dragrace', 'archery'],
+  Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty', 'homerun', 'papertoss', 'skeeball', 'slalom', 'keepyuppy', 'squash', 'dragrace', 'archery', 'pool'],
   Fun: ['eightball', 'slots', 'cookie', 'plinko', 'pet', 'fishing', 'bubblewrap', 'pancake'],
 };
-window.CROWN = ['hillracer', 'railrunner', 'survivor', 'paperio', 'holeio', 'fruitmerge', 'archery', 'squash', 'bricksballs', 'burger', 'twistit', 'slalom', 'snakeblocks', 'helix', 'tugofwar', 'fishing', 'buggy', 'safe', 'artillery', 'lander', 'pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];
+window.CROWN = ['pool', 'hillracer', 'railrunner', 'survivor', 'paperio', 'holeio', 'fruitmerge', 'archery', 'squash', 'bricksballs', 'burger', 'twistit', 'slalom', 'snakeblocks', 'helix', 'tugofwar', 'fishing', 'buggy', 'safe', 'artillery', 'lander', 'pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];

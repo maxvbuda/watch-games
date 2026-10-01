@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Pool</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const COLORS = ['#ffd60a', '#0a84ff', '#ff453a', '#bf5af2', '#ff9f0a', '#30d158', '#8b1a1a', '#111', '#ffd60a', '#0a84ff'];   // 8 & 9 are striped
+    // Take turns potting balls. Pot one and you shoot again; scratch (pot the white) and you lose a point.
+    // The 8 (black) is worth 3. Most points when the table is clear wins.
+    let balls, cue, turn, score, aim, power, moving, potted, scratch, state = 'ready', msg = '', msgT = 0, drag = null, holdT = 0, holding = false, aiT = 0;
+    const T = () => ({ l: 12, r: view.w - 12, t: 36, b: view.h - 10 });
+    const R = () => Math.max(5, view.w * 0.03);
+    const pockets = () => { const t = T(), my = (t.t + t.b) / 2; return [[t.l, t.t], [t.r, t.t], [t.l - 1, my], [t.r + 1, my], [t.l, t.b], [t.r, t.b]]; };
+
+    function rack() {
+      const t = T(), r = R(), cx = (t.l + t.r) / 2, top = t.t + (t.b - t.t) * 0.28;
+      balls = [];
+      // Ten balls in a triangle, apex toward the cue ball, black (n = 7, the "8") in the middle.
+      const order = [0, 1, 2, 3, 7, 4, 5, 6, 8, 9];
+      let k = 0;
+      for (let row = 0; row < 4; row++) for (let i = 0; i <= row; i++) {
+        const n = order[k++];
+        balls.push({ n, x: cx + (i - row / 2) * r * 2.05, y: top - row * r * 1.8, vx: 0, vy: 0, in: false, val: n === 7 ? 3 : 1 });
+      }
+      cue = { cue: true, x: cx, y: t.t + (t.b - t.t) * 0.78, vx: 0, vy: 0, in: false };
+      balls.push(cue);
+    }
+    function reset() { rack(); turn = 0; score = [0, 0]; aim = -Math.PI / 2; power = 0; moving = false; potted = 0; scratch = false; updateHud(); }
+    function updateHud() { hud.innerHTML = `${score[0]}–${score[1]}<small>${turn === 0 ? 'your shot' : 'watch…'}</small>`; }
+
+    function shoot(a, p) {
+      cue.vx = Math.cos(a) * p * view.w * 3.2; cue.vy = Math.sin(a) * p * view.w * 3.2;
+      moving = true; potted = 0; scratch = false;
+      W.sfx(200 + p * 300, { type: 'triangle', dur: 0.06, vol: 0.1 });
+    }
+
+    function physics(dt) {
+      const t = T(), r = R();
+      for (const b of balls) {
+        if (b.in) continue;
+        b.x += b.vx * dt; b.y += b.vy * dt;
+        const sp = Math.hypot(b.vx, b.vy), dec = Math.max(0, sp - view.w * 0.55 * dt);
+        if (sp > 0) { b.vx *= dec / sp; b.vy *= dec / sp; }
+        // Pockets.
+        for (const [px, py] of pockets()) if (Math.hypot(b.x - px, b.y - py) < r * 1.55) {
+          b.in = true; b.vx = b.vy = 0;
+          if (b.cue) scratch = true; else { potted += b.val; score[turn] += b.val; }
+          W.sfx(b.cue ? 120 : 320, { type: 'sine', dur: 0.2, vol: 0.12, slide: b.cue ? 60 : 160 });
+        }
+        if (b.in) continue;
+        if (b.x < t.l + r) { b.x = t.l + r; b.vx = Math.abs(b.vx) * 0.8; }
+        if (b.x > t.r - r) { b.x = t.r - r; b.vx = -Math.abs(b.vx) * 0.8; }
+        if (b.y < t.t + r) { b.y = t.t + r; b.vy = Math.abs(b.vy) * 0.8; }
+        if (b.y > t.b - r) { b.y = t.b - r; b.vy = -Math.abs(b.vy) * 0.8; }
+      }
+      for (let i = 0; i < balls.length; i++) for (let j = i + 1; j < balls.length; j++) {
+        const a = balls[i], b = balls[j];
+        if (a.in || b.in) continue;
+        const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+        if (d >= 2 * r || d === 0) continue;
+        const nx = dx / d, ny = dy / d, ov = 2 * r - d;
+        a.x -= nx * ov / 2; a.y -= ny * ov / 2; b.x += nx * ov / 2; b.y += ny * ov / 2;
+        const rel = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+        if (rel > 0) { a.vx -= rel * nx * 0.96; a.vy -= rel * ny * 0.96; b.vx += rel * nx * 0.96; b.vy += rel * ny * 0.96; if (rel > 40) W.sfx(900, { type: 'square', dur: 0.015, vol: Math.min(0.06, rel / 4000) }); }
+      }
+    }
+
+    function endTurn() {
+      moving = false;
+      const left = balls.filter(b => !b.cue && !b.in).length;
+      if (scratch) {
+        score[turn] = Math.max(0, score[turn] - 1);
+        const t = T(); cue.in = false; cue.x = (t.l + t.r) / 2; cue.y = t.t + (t.b - t.t) * 0.78;
+        // Nudge the white off any ball sitting on the spot.
+        while (balls.some(b => b !== cue && !b.in && Math.hypot(b.x - cue.x, b.y - cue.y) < R() * 2.2)) cue.y -= R();
+        msg = 'Scratch! −1'; msgT = 1;
+      }
+      if (!left) return finish();
+      if (scratch || !potted) { turn = 1 - turn; if (!scratch) { msg = turn === 0 ? 'Your shot' : "Watch's shot"; msgT = 0.8; } }
+      else { msg = potted >= 3 ? '+3 — black ball!' : `+${potted} — shoot again!`; msgT = 0.9; }
+      aiT = 0.9;
+      updateHud();
+    }
+    function finish() {
+      state = 'over';
+      const won = score[0] > score[1];
+      if (won) W.best('pool', score[0]);
+      W.overlay({ title: won ? 'You win! 🎱' : score[0] === score[1] ? 'Tie game' : 'Watch wins 🤖', big: `${score[0]}–${score[1]}`, button: 'Rack \'em', onStart: start });
+    }
+
+    // Watch AI: ghost-ball aiming at every ball/pocket pair; pick the easiest clear shot, with some error.
+    function clear(x0, y0, x1, y1, skip) {
+      const r = R(), dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy);
+      for (const b of balls) {
+        if (b.in || skip.includes(b)) continue;
+        const u = ((b.x - x0) * dx + (b.y - y0) * dy) / (L * L);
+        if (u < 0 || u > 1) continue;
+        if (Math.hypot(b.x - (x0 + u * dx), b.y - (y0 + u * dy)) < r * 2) return false;
+      }
+      return true;
+    }
+    function aiShot() {
+      const r = R();
+      let best = null, bs = -Infinity;
+      for (const b of balls) {
+        if (b.in || b.cue) continue;
+        for (const [px, py] of pockets()) {
+          const dx = px - b.x, dy = py - b.y, d = Math.hypot(dx, dy), gx = b.x - dx / d * r * 2, gy = b.y - dy / d * r * 2;
+          const ca = Math.atan2(gy - cue.y, gx - cue.x), cut = Math.abs(((Math.atan2(dy, dx) - ca + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+          if (cut > 1.25) continue;
+          const ok = clear(cue.x, cue.y, gx, gy, [cue, b]) && clear(b.x, b.y, px, py, [b, cue]);
+          const s = (ok ? 100 : 0) - cut * 40 - d * 0.1 - Math.hypot(gx - cue.x, gy - cue.y) * 0.05 + b.val * 10;
+          if (s > bs) { bs = s; best = { a: ca, p: W.clamp((d + Math.hypot(gx - cue.x, gy - cue.y)) / (view.w * 1.4) + 0.15, 0.25, 0.9) }; }
+        }
+      }
+      if (!best) best = { a: W.rand(0, Math.PI * 2), p: 0.5 };
+      aim = best.a + W.rand(-0.045, 0.045);
+      shoot(aim, best.p);
+    }
+
+    // Aim helper: where the cue ball first hits something along the aim line.
+    function ghost() {
+      const r = R(), dx = Math.cos(aim), dy = Math.sin(aim), t = T();
+      let best = 1e9, hit = null;
+      for (const b of balls) {
+        if (b.in || b.cue) continue;
+        const ox = b.x - cue.x, oy = b.y - cue.y, proj = ox * dx + oy * dy;
+        if (proj <= 0) continue;
+        const perp2 = ox * ox + oy * oy - proj * proj, rr = 4 * r * r;
+        if (perp2 > rr) continue;
+        const dist = proj - Math.sqrt(rr - perp2);
+        if (dist < best) { best = dist; hit = b; }
+      }
+      const wall = Math.min(dx > 0 ? (t.r - r - cue.x) / dx : dx < 0 ? (t.l + r - cue.x) / dx : 1e9, dy > 0 ? (t.b - r - cue.y) / dy : dy < 0 ? (t.t + r - cue.y) / dy : 1e9);
+      return { d: Math.min(best, wall), hit: best < wall ? hit : null };
+    }
+
+    function update(dt) {
+      if (moving) {
+        for (let k = 0; k < 6; k++) physics(dt / 6);
+        if (balls.every(b => b.in || Math.hypot(b.vx, b.vy) < 3)) { balls.forEach(b => { b.vx = b.vy = 0; }); endTurn(); }
+      } else if (turn === 1) { aiT -= dt; if (aiT <= 0) aiShot(); }
+      if (holding && !moving && turn === 0) { holdT += dt; power = 0.15 + Math.abs(Math.sin(holdT * 1.6)) * 0.85; }
+    }
+
+    function render(dt) {
+      const { w, h } = view, t = T(), r = R();
+      ctx.fillStyle = '#3b1f0e'; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#5c3218'; ctx.fillRect(t.l - 8, t.t - 8, t.r - t.l + 16, t.b - t.t + 16);
+      const felt = ctx.createRadialGradient(w / 2, (t.t + t.b) / 2, 10, w / 2, (t.t + t.b) / 2, w);
+      felt.addColorStop(0, '#1f8f4a'); felt.addColorStop(1, '#126b36');
+      ctx.fillStyle = felt; ctx.fillRect(t.l, t.t, t.r - t.l, t.b - t.t);
+      ctx.strokeStyle = '#ffffff22'; ctx.beginPath(); ctx.moveTo(t.l, t.t + (t.b - t.t) * 0.72); ctx.lineTo(t.r, t.t + (t.b - t.t) * 0.72); ctx.stroke();
+      for (const [px, py] of pockets()) { ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(px, py, r * 1.6, 0, 7); ctx.fill(); }
+      // Aim line + ghost ball (your turn only).
+      if (!moving && turn === 0 && state === 'play' && !cue.in) {
+        const g = ghost(), gx = cue.x + Math.cos(aim) * g.d, gy = cue.y + Math.sin(aim) * g.d;
+        ctx.strokeStyle = '#ffffff99'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(cue.x, cue.y); ctx.lineTo(gx, gy); ctx.stroke(); ctx.setLineDash([]);
+        ctx.strokeStyle = '#ffffffaa'; ctx.beginPath(); ctx.arc(gx, gy, r, 0, 7); ctx.stroke();
+        if (g.hit) { const a = Math.atan2(g.hit.y - gy, g.hit.x - gx); ctx.strokeStyle = '#ffd60a99'; ctx.beginPath(); ctx.moveTo(g.hit.x, g.hit.y); ctx.lineTo(g.hit.x + Math.cos(a) * 30, g.hit.y + Math.sin(a) * 30); ctx.stroke(); }
+        // Cue stick, pulled back by the current power.
+        const back = r + 4 + power * 26;
+        ctx.strokeStyle = '#d9a066'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(cue.x - Math.cos(aim) * back, cue.y - Math.sin(aim) * back); ctx.lineTo(cue.x - Math.cos(aim) * (back + 70), cue.y - Math.sin(aim) * (back + 70)); ctx.stroke();
+        if (power > 0) { ctx.fillStyle = '#0008'; ctx.fillRect(t.l + 4, t.b - 10, 50, 5); ctx.fillStyle = power > 0.8 ? '#ff453a' : '#ffd60a'; ctx.fillRect(t.l + 4, t.b - 10, 50 * power, 5); }
+      }
+      for (const b of balls) {
+        if (b.in) continue;
+        ctx.fillStyle = '#0005'; ctx.beginPath(); ctx.arc(b.x + 1, b.y + 1.5, r, 0, 7); ctx.fill();
+        ctx.fillStyle = b.cue ? '#f5f5f0' : COLORS[b.n];
+        ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, 7); ctx.fill();
+        if (!b.cue && b.n >= 8) { ctx.fillStyle = '#fff'; ctx.fillRect(b.x - r, b.y - r * 0.45, r * 2, r * 0.9); ctx.fillStyle = COLORS[b.n]; }
+        if (!b.cue) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(b.x, b.y, r * 0.42, 0, 7); ctx.fill(); ctx.fillStyle = '#000'; ctx.font = `700 ${Math.round(r * 0.75)}px -apple-system, system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(b.n + 1, b.x, b.y + 0.5); }
+        ctx.fillStyle = '#ffffff55'; ctx.beginPath(); ctx.arc(b.x - r * 0.35, b.y - r * 0.35, r * 0.25, 0, 7); ctx.fill();
+      }
+      if (msgT > 0) { msgT -= dt; ctx.globalAlpha = Math.min(1, msgT * 3); ctx.fillStyle = '#fff'; ctx.font = '800 13px -apple-system, system-ui'; ctx.textAlign = 'center'; ctx.fillText(msg, w / 2, t.t + (t.b - t.t) * 0.55); ctx.globalAlpha = 1; }
+    }
+
+    // Pull back from the cue ball and release (slingshot), or aim with the Crown and press-and-hold for power.
+    W.pointer(canvas, {
+      down(p) { if (state !== 'play' || moving || turn !== 0) return; drag = { sx: p.x, sy: p.y, moved: false }; holding = true; holdT = 0; power = 0; },
+      move(p) {
+        if (!drag) return;
+        const dx = p.x - drag.sx, dy = p.y - drag.sy;
+        if (Math.hypot(dx, dy) > 8) { drag.moved = true; holding = false; aim = Math.atan2(-dy, -dx); power = Math.min(1, Math.hypot(dx, dy) / (view.w * 0.45)); }
+      },
+      up() {
+        if (!drag) return;
+        if (power > 0.05) shoot(aim, power);
+        drag = null; holding = false; power = 0;
+      },
+    });
+    W.crown(d => { if (!moving && turn === 0) aim += d * 0.004; });
+    window.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') aim -= 0.03; if (e.key === 'ArrowRight') aim += 0.03; if (e.key === ' ' && !moving && turn === 0) shoot(aim, 0.6); });
+
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🎱 Pool', text: 'Pull back from anywhere and<br>release to shoot. Or aim with<br>the Crown, hold for power.<br>Pot one → shoot again!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
