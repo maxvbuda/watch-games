@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Bricks & Balls</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const COLS = 6, TOP = 32;
+    // Drag to aim (or turn the Crown), release to fire all your balls. Bricks drop one row per turn.
+    let bricks, balls, nBalls, launchX, aim, firing, toFire, fireT, round, state = 'ready', aiming = false, nextX;
+    const CW = () => view.w / COLS, BR = () => 3.2, FLOOR = () => view.h - 8;
+
+    function addRow() {
+      for (const b of bricks) b.row++;
+      for (let c = 0; c < COLS; c++) {
+        const r = W.rng();
+        if (r < 0.55) bricks.push({ c, row: 0, hp: W.rng() < 0.2 ? round * 2 : round });
+        else if (r < 0.68) bricks.push({ c, row: 0, plus: true });
+      }
+    }
+    function reset() { bricks = []; balls = []; nBalls = 1; round = 1; launchX = view.w / 2; aim = -Math.PI / 2; firing = false; addRow(); updateHud(); }
+    function updateHud() { hud.innerHTML = `${round}<small>⚪×${nBalls}</small>`; }
+    const rowY = r => TOP + 4 + r * CW() * 0.62;
+
+    function fire() {
+      if (state !== 'play' || firing) return;
+      firing = true; toFire = nBalls; fireT = 0; nextX = null;
+    }
+    function update(dt) {
+      if (firing && toFire > 0) {
+        fireT -= dt;
+        if (fireT <= 0) { fireT = 0.07; toFire--; const sp = view.h * 1.6; balls.push({ x: launchX, y: FLOOR() - BR(), vx: Math.cos(aim) * sp, vy: Math.sin(aim) * sp }); }
+      }
+      const steps = 4, cw = CW(), bh = cw * 0.56;
+      for (let s = 0; s < steps; s++) {
+        const h = dt / steps;
+        for (const b of balls) {
+          if (b.done) continue;
+          b.x += b.vx * h; b.y += b.vy * h;
+          if (b.x < BR()) { b.x = BR(); b.vx = Math.abs(b.vx); }
+          if (b.x > view.w - BR()) { b.x = view.w - BR(); b.vx = -Math.abs(b.vx); }
+          if (b.y < TOP + BR()) { b.y = TOP + BR(); b.vy = Math.abs(b.vy); }
+          if (b.y > FLOOR() - BR() && b.vy > 0) { b.done = true; if (nextX === null) nextX = b.x; continue; }
+          for (const k of bricks) {
+            if (k.dead) continue;
+            const x0 = k.c * cw + 1.5, y0 = rowY(k.row), x1 = x0 + cw - 3, y1 = y0 + bh;
+            if (k.plus) { if (Math.hypot(b.x - (x0 + x1) / 2, b.y - (y0 + y1) / 2) < cw * 0.25) { k.dead = true; nBalls++; } continue; }
+            if (b.x + BR() < x0 || b.x - BR() > x1 || b.y + BR() < y0 || b.y - BR() > y1) continue;
+            const ox = Math.min(b.x + BR() - x0, x1 - (b.x - BR())), oy = Math.min(b.y + BR() - y0, y1 - (b.y - BR()));
+            if (ox < oy) b.vx *= -1; else b.vy *= -1;
+            if (--k.hp <= 0) k.dead = true;
+            break;
+          }
+        }
+      }
+      bricks = bricks.filter(k => !k.dead);
+      if (firing && toFire === 0 && balls.every(b => b.done)) {
+        firing = false; balls = []; launchX = W.clamp(nextX ?? launchX, 8, view.w - 8);
+        round++; addRow(); updateHud();
+        if (bricks.some(k => !k.plus && rowY(k.row) + CW() * 0.56 > FLOOR() - 20)) {
+          state = 'over';
+          const best = W.best('bricksballs', round);
+          W.overlay({ title: 'Bricks reached you!', big: 'Round ' + round, text: `Best ${best}`, button: 'Again', onStart: start });
+        }
+      }
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#101018'; ctx.fillRect(0, 0, w, h);
+      const cw = CW(), bh = cw * 0.56;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const k of bricks) {
+        const x = k.c * cw + 1.5, y = rowY(k.row);
+        if (k.plus) { ctx.strokeStyle = '#30d158'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x + cw / 2 - 1.5, y + bh / 2, cw * 0.18, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = '#30d158'; ctx.font = '800 10px -apple-system, system-ui'; ctx.fillText('+1', x + cw / 2 - 1.5, y + bh / 2); continue; }
+        ctx.fillStyle = `hsl(${(k.hp * 11) % 360},70%,${Math.max(35, 60 - k.hp)}%)`;
+        ctx.fillRect(x, y, cw - 3, bh);
+        ctx.fillStyle = '#fff'; ctx.font = `800 ${Math.round(bh * 0.5)}px -apple-system, system-ui`; ctx.fillText(k.hp, x + (cw - 3) / 2, y + bh / 2 + 1);
+      }
+      ctx.fillStyle = '#fff';
+      for (const b of balls) if (!b.done) { ctx.beginPath(); ctx.arc(b.x, b.y, BR(), 0, Math.PI * 2); ctx.fill(); }
+      if (!firing && state === 'play') {
+        ctx.strokeStyle = '#ffffff66'; ctx.setLineDash([3, 4]); ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(launchX, FLOOR()); ctx.lineTo(launchX + Math.cos(aim) * h * 0.6, FLOOR() + Math.sin(aim) * h * 0.6); ctx.stroke(); ctx.setLineDash([]);
+        ctx.beginPath(); ctx.arc(launchX, FLOOR() - BR(), BR() + 1, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = '#3a3a3c'; ctx.fillRect(0, FLOOR(), w, h);
+    }
+
+    const setAim = a => (aim = W.clamp(a, -Math.PI + 0.15, -0.15));
+    W.pointer(canvas, {
+      down: p => { if (!firing) { aiming = true; if (p.y < FLOOR() - 30) setAim(Math.atan2(p.y - FLOOR(), p.x - launchX)); } },   // taps near the bottom fire without re-aiming (for Crown aiming)
+      move: p => { if (aiming && p.y < FLOOR() - 30) setAim(Math.atan2(p.y - FLOOR(), p.x - launchX)); },
+      up: () => { if (aiming) { aiming = false; fire(); } },
+    });
+    W.crown(d => { if (!firing) setAim(aim + d * 0.006); });
+    window.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') setAim(aim - 0.05); if (e.key === 'ArrowRight') setAim(aim + 0.05); if (e.key === ' ') fire(); });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🧱 Bricks & Balls', text: 'Drag to aim, release to fire.<br>Grab +1 rings for more balls.<br>Don\'t let bricks reach you!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(); });
+  </script>
+</body>
+</html>
