@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Rhythm Tap</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const LANES = 3, COLORS = ['#ff375f', '#ffd60a', '#64d2ff'], NOTES = [261.6, 329.6, 392];
+    // Notes fall on a beat; tap the lane as they cross the line. Hit streaks build a multiplier.
+    let notes, score, streak, lives, bpm, beatT, t, state = 'ready', flashes = [0, 0, 0], judge = '', judgeT = 0, audio;
+    const LINE = () => view.h - 34;
+
+    function tone(i, good) {
+      try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.type = good ? 'triangle' : 'sawtooth'; o.frequency.value = good ? NOTES[i] * (1 + Math.min(streak, 16) / 32) : 110;
+        g.gain.setValueAtTime(0.18, audio.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.25);
+        o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + 0.25);
+      } catch (e) {}
+    }
+    function reset() { notes = []; score = 0; streak = 0; lives = 5; bpm = 90; beatT = 0.8; t = 0; updateHud(); }
+    function updateHud() { hud.innerHTML = `${score}<small>×${1 + Math.floor(streak / 8)} · ${'♥'.repeat(lives)}</small>`; }
+
+    function update(dt) {
+      t += dt;
+      bpm = Math.min(170, 90 + t * 1.2);
+      beatT -= dt;
+      if (beatT <= 0) {
+        beatT = 60 / bpm * (W.rng() < 0.25 ? 0.5 : 1);
+        notes.push({ lane: W.randInt(0, LANES - 1), y: -10 });
+        if (t > 25 && W.rng() < 0.15) notes.push({ lane: W.randInt(0, LANES - 1), y: -40 });
+      }
+      const speed = view.h * (0.55 + bpm / 400);
+      for (const n of notes) {
+        n.y += speed * dt;
+        if (!n.hit && !n.missed && n.y > LINE() + 22) { n.missed = true; miss(); }
+      }
+      notes = notes.filter(n => n.y < view.h + 20 && !n.hit);
+    }
+    function miss() {
+      streak = 0; lives--; judge = 'Miss'; judgeT = 0.5; updateHud();
+      if (lives <= 0) {
+        state = 'over';
+        const best = W.best('rhythm', score);
+        setTimeout(() => W.overlay({ title: 'Song over 🎵', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 300);
+      }
+    }
+    function tap(lane) {
+      if (state !== 'play') return;
+      flashes[lane] = 0.15;
+      const cand = notes.filter(n => n.lane === lane && !n.hit && !n.missed).sort((a, b) => Math.abs(a.y - LINE()) - Math.abs(b.y - LINE()))[0];
+      const d = cand ? Math.abs(cand.y - LINE()) : 999;
+      if (d < 26) {
+        cand.hit = true; streak++;
+        const perfect = d < 9;
+        score += (perfect ? 3 : 1) * (1 + Math.floor(streak / 8));
+        judge = perfect ? 'Perfect!' : 'Good'; judgeT = 0.4;
+        tone(lane, true);
+      } else { tone(lane, false); miss(); }
+      updateHud();
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#0b0614'; ctx.fillRect(0, 0, w, h);
+      const lw = w / LANES;
+      for (let i = 0; i < LANES; i++) {
+        flashes[i] = Math.max(0, flashes[i] - dt);
+        ctx.fillStyle = flashes[i] > 0 ? COLORS[i] + '44' : i % 2 ? '#140c22' : '#100a1c';
+        ctx.fillRect(i * lw, 0, lw, h);
+      }
+      ctx.fillStyle = '#ffffff33'; ctx.fillRect(0, LINE() - 1, w, 2);
+      for (let i = 0; i < LANES; i++) { ctx.strokeStyle = COLORS[i]; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc((i + 0.5) * lw, LINE(), lw * 0.3, 0, Math.PI * 2); ctx.stroke(); }
+      for (const n of notes) {
+        ctx.fillStyle = n.missed ? '#48484a' : COLORS[n.lane];
+        ctx.beginPath(); ctx.arc((n.lane + 0.5) * lw, n.y, lw * 0.26, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff66'; ctx.beginPath(); ctx.arc((n.lane + 0.5) * lw - 4, n.y - 4, lw * 0.08, 0, Math.PI * 2); ctx.fill();
+      }
+      if (judgeT > 0) { judgeT -= dt; ctx.globalAlpha = Math.min(1, judgeT * 4); ctx.fillStyle = judge === 'Miss' ? '#ff453a' : '#fff'; ctx.font = '800 16px -apple-system, system-ui'; ctx.textAlign = 'center'; ctx.fillText(judge, w / 2, h * 0.45); ctx.globalAlpha = 1; }
+    }
+
+    W.pointer(canvas, { down: p => tap(Math.min(LANES - 1, Math.floor(p.x / (view.w / LANES)))) });
+    window.addEventListener('keydown', e => { const k = { a: 0, s: 1, d: 2, ArrowLeft: 0, ArrowDown: 1, ArrowRight: 2 }[e.key]; if (k !== undefined) tap(k); });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🎵 Rhythm Tap', text: 'Tap each lane as the notes<br>hit the circles. The beat<br>speeds up!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
