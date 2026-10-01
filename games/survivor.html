@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Survivor</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #lvl { position: fixed; inset: 0; z-index: 25; background: #000c; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 10px; }
+    #lvl h2 { font-size: 16px; margin-bottom: 2px; }
+    #lvl button { width: 100%; max-width: 260px; border: 0; border-radius: 12px; background: #2c2c2e; color: #fff; font: inherit; text-align: left; padding: 7px 10px; display: flex; gap: 8px; align-items: center; }
+    #lvl button b { font-size: 12px; display: block; }
+    #lvl button span { font-size: 10px; color: var(--muted); }
+    #lvl button i { font-style: normal; font-size: 20px; }
+  </style>
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <div id="lvl" class="hidden"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const WIN_TIME = 300;
+    const FOES = { bat: { e: '🦇', hp: 3, sp: 62, r: 6, dmg: 4, xp: 1 }, zombie: { e: '🧟', hp: 9, sp: 30, r: 8, dmg: 8, xp: 2 }, skull: { e: '💀', hp: 16, sp: 44, r: 8, dmg: 10, xp: 3 }, ghost: { e: '👻', hp: 26, sp: 52, r: 9, dmg: 12, xp: 5 }, boss: { e: '👹', hp: 170, sp: 32, r: 16, dmg: 16, xp: 40 } };
+    // Weapons level 1-5. Each upgrade card either adds a weapon or levels one up.
+    const WEAPONS = {
+      wand: { e: '✨', name: 'Magic Wand', desc: 'Bolts at the nearest foe' },
+      garlic: { e: '🧄', name: 'Garlic', desc: 'Hurts everything near you' },
+      axe: { e: '🪓', name: 'Orbit Axes', desc: 'Axes circle around you' },
+      bolt: { e: '⚡', name: 'Lightning', desc: 'Strikes random foes' },
+      fire: { e: '🔥', name: 'Fireball', desc: 'Exploding shots, big damage' },
+    };
+    const PERKS = { speed: { e: '👟', name: 'Swift Boots', desc: '+15% move speed' }, heart: { e: '❤️', name: 'Big Heart', desc: '+25 max HP and heal' }, magnet: { e: '🧲', name: 'Magnet', desc: 'Pick up gems from farther' } };
+    let me, foes, shots, gems, fx, t, spawnT, kills, state = 'ready', joy = null, crownDir = null, lvlUp = false, nextBoss;
+
+    function reset() {
+      me = { x: 0, y: 0, hp: 100, max: 100, speed: 62, xp: 0, need: 4, level: 1, magnet: 34, inv: 0, w: { wand: 1 }, cd: {}, face: 1 };
+      foes = []; shots = []; gems = []; fx = []; t = 0; spawnT = 0; kills = 0; nextBoss = 60; crownDir = null;
+      updateHud();
+    }
+    function updateHud() {
+      const m = Math.floor(t / 60), s = String(Math.floor(t % 60)).padStart(2, '0');
+      hud.innerHTML = `${m}:${s}<small>Lv ${me.level} · ☠️ ${kills}</small>`;
+    }
+
+    function spawn(kind) {
+      const a = W.rand(0, Math.PI * 2), d = Math.max(view.w, view.h) * 0.75 + 20, f = FOES[kind];
+      const scale = 1 + t / 120;   // foes toughen over time
+      foes.push({ kind, e: f.e, x: me.x + Math.cos(a) * d, y: me.y + Math.sin(a) * d, hp: f.hp * scale, max: f.hp * scale, sp: f.sp, r: f.r, dmg: f.dmg, xp: f.xp, hit: 0 });
+    }
+    function damage(f, n, kx = 0, ky = 0) {
+      f.hp -= n; f.hit = 0.1; f.x += kx; f.y += ky;
+      fx.push({ x: f.x, y: f.y - f.r, txt: Math.round(n), t: 0.5, c: '#fff' });
+      if (f.hp <= 0 && !f.dead) {
+        f.dead = true; kills++;
+        gems.push({ x: f.x, y: f.y, v: f.xp });
+        if (f.kind === 'boss') { for (let k = 0; k < 12; k++) gems.push({ x: f.x + W.rand(-20, 20), y: f.y + W.rand(-20, 20), v: 4 }); W.sfx(140, { type: 'sawtooth', dur: 0.5, vol: 0.12, slide: 40 }); }
+        else W.sfx(520, { type: 'square', dur: 0.03, vol: 0.03 });
+      }
+    }
+    const nearest = (x, y, maxD = 1e9) => { let b = null, bd = maxD; for (const f of foes) { const d = Math.hypot(f.x - x, f.y - y); if (!f.dead && d < bd) { bd = d; b = f; } } return b; };
+
+    function weapons(dt) {
+      const L = me.w, cd = me.cd;
+      for (const k in L) cd[k] = (cd[k] || 0) - dt;
+      if (L.wand && cd.wand <= 0) {
+        const tgt = nearest(me.x, me.y, 220);
+        if (tgt) {
+          for (let k = 0; k < Math.ceil(L.wand / 2); k++) {
+            const a = Math.atan2(tgt.y - me.y, tgt.x - me.x) + (k - (Math.ceil(L.wand / 2) - 1) / 2) * 0.18;
+            shots.push({ x: me.x, y: me.y, vx: Math.cos(a) * 230, vy: Math.sin(a) * 230, dmg: 4 + L.wand * 1.5, life: 1, kind: 'wand', pierce: L.wand >= 4 ? 2 : 1 });
+          }
+          cd.wand = Math.max(0.35, 0.9 - L.wand * 0.1);
+          W.sfx(900, { type: 'sine', dur: 0.04, vol: 0.025 });
+        }
+      }
+      if (L.fire && cd.fire <= 0) {
+        const tgt = nearest(me.x, me.y, 240);
+        if (tgt) { const a = Math.atan2(tgt.y - me.y, tgt.x - me.x); shots.push({ x: me.x, y: me.y, vx: Math.cos(a) * 140, vy: Math.sin(a) * 140, dmg: 10 + L.fire * 5, life: 1.6, kind: 'fire', boom: 26 + L.fire * 6 }); cd.fire = Math.max(1, 2.4 - L.fire * 0.3); }
+      }
+      if (L.garlic && cd.garlic <= 0) {
+        const R = 26 + L.garlic * 7;
+        for (const f of foes) if (!f.dead && Math.hypot(f.x - me.x, f.y - me.y) < R + f.r) { const a = Math.atan2(f.y - me.y, f.x - me.x); damage(f, 2 + L.garlic * 1.4, Math.cos(a) * 5, Math.sin(a) * 5); }
+        cd.garlic = 0.45;
+      }
+      if (L.axe) {
+        const n = 1 + Math.floor(L.axe / 2), R = 30 + L.axe * 3;
+        for (let k = 0; k < n; k++) {
+          const a = t * 3.2 + k * Math.PI * 2 / n, ax = me.x + Math.cos(a) * R, ay = me.y + Math.sin(a) * R;
+          for (const f of foes) if (!f.dead && f.hit <= 0 && Math.hypot(f.x - ax, f.y - ay) < f.r + 7) damage(f, 4 + L.axe * 2, Math.cos(a) * 6, Math.sin(a) * 6);
+        }
+      }
+      if (L.bolt && cd.bolt <= 0) {
+        const near = foes.filter(f => !f.dead && Math.hypot(f.x - me.x, f.y - me.y) < 200);
+        for (let k = 0; k < L.bolt && near.length; k++) { const f = W.pick(near); damage(f, 8 + L.bolt * 4); fx.push({ x: f.x, y: f.y, bolt: true, t: 0.2 }); }
+        if (near.length) W.sfx(1200, { type: 'sawtooth', dur: 0.06, vol: 0.03, slide: 200 });
+        cd.bolt = Math.max(0.8, 2 - L.bolt * 0.2);
+      }
+    }
+
+    function offerLevelUp() {
+      lvlUp = true;
+      const opts = [];
+      for (const [k, wpn] of Object.entries(WEAPONS)) {
+        const lv = me.w[k] || 0;
+        if (lv < 5 && (lv > 0 || Object.keys(me.w).length < 4)) opts.push({ k, kind: 'w', e: wpn.e, name: lv ? `${wpn.name} Lv ${lv + 1}` : `NEW: ${wpn.name}`, desc: wpn.desc });
+      }
+      for (const [k, p] of Object.entries(PERKS)) opts.push({ k, kind: 'p', ...p });
+      const pick3 = W.shuffle(opts).slice(0, 3);
+      const box = document.getElementById('lvl');
+      box.innerHTML = `<h2>⭐️ Level ${me.level}! Choose:</h2>`;
+      for (const o of pick3) {
+        const b = document.createElement('button');
+        b.innerHTML = `<i>${o.e}</i><div><b>${o.name}</b><span>${o.desc}</span></div>`;
+        b.addEventListener('click', () => {
+          if (o.kind === 'w') me.w[o.k] = (me.w[o.k] || 0) + 1;
+          else if (o.k === 'speed') me.speed *= 1.15;
+          else if (o.k === 'heart') { me.max += 25; me.hp = me.max; }
+          else me.magnet *= 1.6;
+          box.classList.add('hidden'); lvlUp = false;
+        });
+        box.appendChild(b);
+      }
+      box.classList.remove('hidden');
+      W.sfx(660, { type: 'triangle', dur: 0.3, vol: 0.1, slide: 1320 });
+    }
+
+    function update(dt) {
+      if (lvlUp) return;
+      t += dt;
+      // Movement: joystick from where your finger landed, or the Crown's heading.
+      let mx = 0, my = 0;
+      if (joy && joy.cur) { const dx = joy.cur.x - joy.start.x, dy = joy.cur.y - joy.start.y, d = Math.hypot(dx, dy); if (d > 4) { mx = dx / d * Math.min(1, d / 30); my = dy / d * Math.min(1, d / 30); } }
+      else if (crownDir !== null) { mx = Math.cos(crownDir); my = Math.sin(crownDir); }
+      me.x += mx * me.speed * dt; me.y += my * me.speed * dt;
+      if (mx) me.face = Math.sign(mx);
+      // Spawning ramps up; a boss every minute.
+      spawnT -= dt;
+      if (spawnT <= 0 && foes.length < 90) {
+        const pool = t < 30 ? ['bat', 'zombie'] : t < 90 ? ['bat', 'zombie', 'skull'] : ['bat', 'zombie', 'skull', 'ghost'];
+        for (let k = 0; k < 1 + Math.floor(t / 40); k++) spawn(W.pick(pool));
+        spawnT = Math.max(0.25, 0.85 - t * 0.003);
+      }
+      if (t >= nextBoss) { spawn('boss'); nextBoss += 60; fx.push({ banner: '👹 A boss appears!', t: 2 }); }
+      for (const f of foes) {
+        const dx = me.x - f.x, dy = me.y - f.y, d = Math.hypot(dx, dy) || 1;
+        f.x += dx / d * f.sp * dt; f.y += dy / d * f.sp * dt; f.hit = Math.max(0, f.hit - dt);
+        if (d < f.r + 7 && me.inv <= 0) { me.hp -= f.dmg; me.inv = 0.6; W.sfx(160, { type: 'square', dur: 0.08, vol: 0.06 }); }
+      }
+      // Foes push apart so they don't stack into one blob.
+      for (let i = 0; i < foes.length; i++) for (let j = i + 1; j < foes.length; j++) { const a = foes[i], b = foes[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), m = a.r + b.r; if (d < m && d > 0) { const p = (m - d) / 2; a.x -= dx / d * p; a.y -= dy / d * p; b.x += dx / d * p; b.y += dy / d * p; } }
+      me.inv = Math.max(0, me.inv - dt);
+      weapons(dt);
+      for (const s of shots) {
+        s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
+        for (const f of foes) {
+          if (f.dead || s.life <= 0 || Math.hypot(f.x - s.x, f.y - s.y) > f.r + 3) continue;
+          if (s.kind === 'fire') { for (const g of foes) if (!g.dead && Math.hypot(g.x - s.x, g.y - s.y) < s.boom) damage(g, s.dmg); fx.push({ x: s.x, y: s.y, ring: s.boom, t: 0.25 }); s.life = 0; W.sfx(120, { type: 'sawtooth', dur: 0.15, vol: 0.06 }); break; }
+          damage(f, s.dmg, s.vx * 0.02, s.vy * 0.02);
+          if (--s.pierce <= 0) { s.life = 0; break; }
+        }
+      }
+      shots = shots.filter(s => s.life > 0);
+      foes = foes.filter(f => !f.dead && Math.hypot(f.x - me.x, f.y - me.y) < 700);
+      // Gems fly to you inside the magnet radius.
+      for (const g of gems) {
+        const d = Math.hypot(me.x - g.x, me.y - g.y);
+        if (d < me.magnet) { g.x += (me.x - g.x) * Math.min(1, dt * 9); g.y += (me.y - g.y) * Math.min(1, dt * 9); }
+        if (d < 8) { g.got = true; me.xp += g.v; W.sfx(1400 + Math.min(me.xp, 40) * 10, { type: 'sine', dur: 0.03, vol: 0.02 }); }
+      }
+      gems = gems.filter(g => !g.got);
+      if (me.xp >= me.need) { me.xp -= me.need; me.level++; me.need = Math.round(me.need * 1.12 + 1.5); me.hp = Math.min(me.max, me.hp + 10); offerLevelUp(); }
+      updateHud();
+      if (me.hp <= 0) end(false);
+      else if (t >= WIN_TIME) end(true);
+    }
+    function end(won) {
+      state = 'over';
+      const score = Math.floor(t) + kills, best = W.best('survivor', score);
+      W.overlay({ title: won ? '🏆 You survived 5 minutes!' : 'Overwhelmed…', big: `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`, text: `Level ${me.level} · ${kills} kills<br>score ${score} · best ${best}`, button: 'Again', onStart: start });
+    }
+
+    function render(dt) {
+      const { w, h } = view, cx = w / 2, cy = h / 2 + 6;
+      ctx.fillStyle = '#1d2b1a'; ctx.fillRect(0, 0, w, h);
+      // Grass tiles scroll under you.
+      ctx.fillStyle = '#243620';
+      const ts = 32, ox = ((-me.x % ts) + ts) % ts, oy = ((-me.y % ts) + ts) % ts;
+      for (let x = -ts; x < w + ts; x += ts) for (let y = -ts; y < h + ts; y += ts) if ((Math.floor((x - ox + me.x) / ts) + Math.floor((y - oy + me.y) / ts)) % 2 === 0) ctx.fillRect(x + ox, y + oy, ts, ts);
+      const sx = x => cx + x - me.x, sy = y => cy + y - me.y;
+      for (const g of gems) { ctx.fillStyle = g.v >= 4 ? '#bf5af2' : g.v >= 2 ? '#64d2ff' : '#30d158'; ctx.beginPath(); ctx.moveTo(sx(g.x), sy(g.y) - 4); ctx.lineTo(sx(g.x) + 3, sy(g.y)); ctx.lineTo(sx(g.x), sy(g.y) + 4); ctx.lineTo(sx(g.x) - 3, sy(g.y)); ctx.fill(); }
+      if (me.w.garlic) { ctx.fillStyle = '#fff6d915'; ctx.strokeStyle = '#fff6d955'; ctx.beginPath(); ctx.arc(cx, cy, 26 + me.w.garlic * 7, 0, 7); ctx.fill(); ctx.stroke(); }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000';
+      for (const f of foes) {
+        ctx.font = `${Math.round(f.r * 2.3)}px sans-serif`;
+        ctx.globalAlpha = f.hit > 0 ? 0.5 : 1;
+        ctx.fillText(f.e, sx(f.x), sy(f.y));
+        if (f.kind === 'boss') { ctx.globalAlpha = 1; ctx.fillStyle = '#300'; ctx.fillRect(sx(f.x) - 16, sy(f.y) - 22, 32, 3); ctx.fillStyle = '#ff453a'; ctx.fillRect(sx(f.x) - 16, sy(f.y) - 22, 32 * f.hp / f.max, 3); ctx.fillStyle = '#000'; }
+      }
+      ctx.globalAlpha = 1;
+      for (const s of shots) {
+        if (s.kind === 'fire') { ctx.font = '12px sans-serif'; ctx.fillText('🔥', sx(s.x), sy(s.y)); }
+        else { ctx.fillStyle = '#ffe680'; ctx.beginPath(); ctx.arc(sx(s.x), sy(s.y), 2.5, 0, 7); ctx.fill(); }
+      }
+      if (me.w.axe) { const n = 1 + Math.floor(me.w.axe / 2), R = 30 + me.w.axe * 3; ctx.font = '13px sans-serif'; for (let k = 0; k < n; k++) { const a = t * 3.2 + k * Math.PI * 2 / n; ctx.save(); ctx.translate(cx + Math.cos(a) * R, cy + Math.sin(a) * R); ctx.rotate(t * 10); ctx.fillText('🪓', 0, 0); ctx.restore(); } }
+      // You.
+      ctx.save(); ctx.translate(cx, cy); ctx.scale(-me.face, 1);
+      ctx.globalAlpha = me.inv > 0 && Math.floor(me.inv * 20) % 2 ? 0.4 : 1;
+      ctx.font = '18px sans-serif'; ctx.fillText('🧙', 0, 0);
+      ctx.restore(); ctx.globalAlpha = 1;
+      for (const e of fx) {
+        e.t -= dt;
+        if (e.banner) { ctx.globalAlpha = Math.min(1, e.t); ctx.fillStyle = '#ff453a'; ctx.font = '800 13px -apple-system, system-ui'; ctx.fillText(e.banner, w / 2, h * 0.3); }
+        else if (e.bolt) { ctx.strokeStyle = `rgba(200,230,255,${e.t * 5})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx(e.x) + W.rand(-6, 6), 0); ctx.lineTo(sx(e.x) + W.rand(-6, 6), sy(e.y) * 0.5); ctx.lineTo(sx(e.x), sy(e.y)); ctx.stroke(); }
+        else if (e.ring) { ctx.strokeStyle = `rgba(255,159,10,${e.t * 4})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sx(e.x), sy(e.y), e.ring * (1.2 - e.t * 2), 0, 7); ctx.stroke(); }
+        else { ctx.globalAlpha = Math.min(1, e.t * 3); ctx.fillStyle = e.c; ctx.font = '700 8px -apple-system, system-ui'; ctx.fillText(e.txt, sx(e.x), sy(e.y) - (0.5 - e.t) * 20); }
+        ctx.globalAlpha = 1;
+      }
+      fx = fx.filter(e => e.t > 0);
+      // HP and XP bars.
+      ctx.fillStyle = '#0008'; ctx.fillRect(cx - 12, cy + 12, 24, 3);
+      ctx.fillStyle = me.hp / me.max < 0.3 ? '#ff453a' : '#30d158'; ctx.fillRect(cx - 12, cy + 12, 24 * Math.max(0, me.hp) / me.max, 3);
+      ctx.fillStyle = '#0008'; ctx.fillRect(0, h - 4, w, 4);
+      ctx.fillStyle = '#64d2ff'; ctx.fillRect(0, h - 4, w * me.xp / me.need, 4);
+      if (joy && joy.cur) { ctx.strokeStyle = '#ffffff44'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(joy.start.x, joy.start.y, 22, 0, 7); ctx.stroke(); ctx.fillStyle = '#ffffff55'; const dx = joy.cur.x - joy.start.x, dy = joy.cur.y - joy.start.y, d = Math.hypot(dx, dy), k = Math.min(1, 22 / (d || 1)); ctx.beginPath(); ctx.arc(joy.start.x + dx * k, joy.start.y + dy * k, 8, 0, 7); ctx.fill(); }
+    }
+
+    // Floating joystick: put a finger down anywhere and drag. The Crown sets a heading and keeps you walking;
+    // tap without dragging to stop.
+    W.pointer(canvas, {
+      down: p => { joy = { start: p, cur: p }; },
+      move: p => { if (joy) joy.cur = p; },
+      up: p => { if (joy && Math.hypot(p.x - joy.start.x, p.y - joy.start.y) < 5) crownDir = null; joy = null; },
+    });
+    W.crown(d => { if (state !== 'play' || lvlUp) return; crownDir = (crownDir ?? -Math.PI / 2) + d * 0.008; });
+    const keys = {};
+    window.addEventListener('keydown', e => (keys[e.key] = true));
+    window.addEventListener('keyup', e => (keys[e.key] = false));
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🧙 Survivor', text: 'Drag anywhere to move —<br>your weapons fire on their own.<br>Grab 💎 to level up. Survive!', onStart: start });
+    W.loop(dt => {
+      if (keys.ArrowLeft || keys.ArrowRight || keys.ArrowUp || keys.ArrowDown) { const x = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0), y = (keys.ArrowDown ? 1 : 0) - (keys.ArrowUp ? 1 : 0); joy = { start: { x: 0, y: 0 }, cur: { x: x * 40, y: y * 40 } }; } else if (joy && joy.start.x === 0 && joy.start.y === 0) joy = null;
+      if (state === 'play') update(dt);
+      render(dt);
+    });
+  </script>
+</body>
+</html>
