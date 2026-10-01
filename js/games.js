@@ -98,12 +98,13 @@ window.GAMES = [
   { id: 'ballsort', name: 'Ball Sort', emoji: '🧪', color: '#bf5af2', desc: 'Sort the coloured balls' },
   { id: 'snakeblocks', name: 'Snake vs Blocks', emoji: '🔢', color: '#30d158', desc: 'Crown steers through numbered blocks' },
   { id: 'digitspan', name: 'Digit Span', emoji: '🧮', color: '#64d2ff', desc: 'How many digits can you hold?' },
+  { id: 'pinball', name: 'Pinball', emoji: '🪩', color: '#bf5af2', desc: 'Flip, bump, score' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
 window.CATEGORIES = {
   Arcade: ['snakeio', 'blobio', 'flappy', 'stack', 'dino', 'knife', 'colorswitch', 'invaders', 'fruit', 'dodge', 'cave', 'hop',
-    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase', 'cycles', 'tugofwar', 'rhythm', 'dash', 'helix', 'snakeblocks'],
+    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase', 'cycles', 'tugofwar', 'rhythm', 'dash', 'helix', 'snakeblocks', 'pinball'],
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes', 'gems', 'ballsort'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds', 'capitals', 'timestables', 'oddone', 'digitspan'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers', 'dicepoker'],

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Pinball</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // Hold the left/right half to raise that flipper. Bumpers score; 3 balls.
+    let ball, bumpers, flip, score, balls, state = 'ready', hold = { l: false, r: false }, lit = [];
+    const BR = () => view.w * 0.035;
+
+    function table() {
+      const w = view.w, h = view.h;
+      bumpers = [
+        { x: w * 0.3, y: h * 0.35, r: w * 0.07, pts: 100 }, { x: w * 0.7, y: h * 0.35, r: w * 0.07, pts: 100 },
+        { x: w * 0.5, y: h * 0.5, r: w * 0.08, pts: 150 }, { x: w * 0.5, y: h * 0.22, r: w * 0.05, pts: 250 },
+      ];
+      const fl = w * 0.27, fy = h - 30;
+      flip = [
+        { px: w * 0.18, py: fy, len: fl, rest: 0.45, up: -0.45, a: 0.45, va: 0, side: 1 },
+        { px: w * 0.82, py: fy, len: fl, rest: Math.PI - 0.45, up: Math.PI + 0.45, a: Math.PI - 0.45, va: 0, side: -1 },
+      ];
+    }
+    function serve() { ball = { x: view.w * W.rand(0.3, 0.7), y: view.h * 0.15, vx: W.rand(-60, 60), vy: 0 }; }
+    function updateHud() { hud.innerHTML = `${score}<small>${'⚪'.repeat(balls)}</small>`; }
+
+    // Ball vs line segment (with the segment moving at velocity vel at the contact point).
+    function hitSegment(x1, y1, x2, y2, bounce, mvx = 0, mvy = 0) {
+      const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy;
+      const t = W.clamp(((ball.x - x1) * dx + (ball.y - y1) * dy) / l2, 0, 1);
+      const cx = x1 + t * dx, cy = y1 + t * dy, ex = ball.x - cx, ey = ball.y - cy, d = Math.hypot(ex, ey), r = BR();
+      if (d >= r || d === 0) return false;
+      const nx = ex / d, ny = ey / d;
+      ball.x = cx + nx * r; ball.y = cy + ny * r;
+      const rvx = ball.vx - mvx, rvy = ball.vy - mvy, dot = rvx * nx + rvy * ny;
+      if (dot < 0) { ball.vx -= (1 + bounce) * dot * nx; ball.vy -= (1 + bounce) * dot * ny; }
+      return true;
+    }
+
+    function update(dt) {
+      const steps = 6, h = dt / steps, r = BR(), w = view.w;
+      for (let s = 0; s < steps; s++) {
+        for (const f of flip) {
+          const held = f.side > 0 ? hold.l : hold.r, target = held ? f.up : f.rest, prev = f.a;
+          const sp = 22 * h;
+          f.a += W.clamp(target - f.a, -sp, sp);
+          f.va = (f.a - prev) / h;
+        }
+        ball.vy += view.h * 1.1 * h;
+        ball.x += ball.vx * h; ball.y += ball.vy * h;
+        // Walls, with angled lower guides feeding the flippers.
+        if (ball.x < r + 3) { ball.x = r + 3; ball.vx = Math.abs(ball.vx) * 0.8; }
+        if (ball.x > w - r - 3) { ball.x = w - r - 3; ball.vx = -Math.abs(ball.vx) * 0.8; }
+        if (ball.y < 30 + r) { ball.y = 30 + r; ball.vy = Math.abs(ball.vy) * 0.8; }
+        hitSegment(3, view.h * 0.68, flip[0].px, flip[0].py, 0.3);
+        hitSegment(w - 3, view.h * 0.68, flip[1].px, flip[1].py, 0.3);
+        for (const b of bumpers) {
+          const dx = ball.x - b.x, dy = ball.y - b.y, d = Math.hypot(dx, dy);
+          if (d < b.r + r && d > 0) {
+            const nx = dx / d, ny = dy / d;
+            ball.x = b.x + nx * (b.r + r); ball.y = b.y + ny * (b.r + r);
+            const sp = Math.max(Math.hypot(ball.vx, ball.vy), view.h * 0.9);
+            ball.vx = nx * sp; ball.vy = ny * sp;
+            score += b.pts; lit.push({ b, t: 0.15 }); updateHud();
+          }
+        }
+        for (const f of flip) {
+          const ex = f.px + Math.cos(f.a) * f.len, ey = f.py + Math.sin(f.a) * f.len;
+          // Contact velocity of a rotating flipper ≈ angular speed × distance from pivot.
+          const t = W.clamp(((ball.x - f.px) * (ex - f.px) + (ball.y - f.py) * (ey - f.py)) / (f.len * f.len), 0, 1);
+          const vx = -Math.sin(f.a) * f.va * f.len * t, vy = Math.cos(f.a) * f.va * f.len * t;
+          hitSegment(f.px, f.py, ex, ey, 0.25, vx, vy);
+        }
+        const sp = Math.hypot(ball.vx, ball.vy), max = view.h * 2.6;
+        if (sp > max) { ball.vx *= max / sp; ball.vy *= max / sp; }
+      }
+      if (ball.y > view.h + 20) {
+        balls--; updateHud();
+        if (balls <= 0) { state = 'over'; const best = W.best('pinball', score); W.overlay({ title: 'Game over', big: score, text: `Best ${best}`, button: 'Again', onStart: start }); }
+        else serve();
+      }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#1a0b3a'); g.addColorStop(1, '#0b1a3a');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#bf5af2'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(3, h); ctx.lineTo(3, 30); ctx.lineTo(w - 3, 30); ctx.lineTo(w - 3, h); ctx.stroke();
+      ctx.strokeStyle = '#64d2ff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(3, h * 0.68); ctx.lineTo(flip[0].px, flip[0].py); ctx.moveTo(w - 3, h * 0.68); ctx.lineTo(flip[1].px, flip[1].py); ctx.stroke();
+      for (const b of bumpers) {
+        const on = lit.some(l => l.b === b);
+        ctx.fillStyle = on ? '#fff' : '#ff375f';
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffd60a'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.55, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.font = `700 ${Math.round(b.r * 0.6)}px -apple-system, system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(b.pts, b.x, b.y + 1);
+      }
+      for (const l of lit) l.t -= dt;
+      lit = lit.filter(l => l.t > 0);
+      ctx.strokeStyle = '#ffd60a'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+      for (const f of flip) { ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(f.px + Math.cos(f.a) * f.len, f.py + Math.sin(f.a) * f.len); ctx.stroke(); }
+      ctx.fillStyle = '#e5e5ea'; ctx.beginPath(); ctx.arc(ball.x, ball.y, BR(), 0, Math.PI * 2); ctx.fill();
+    }
+
+    const touches = new Map();
+    function setHolds() { hold.l = hold.r = false; for (const x of touches.values()) { if (x < view.w / 2) hold.l = true; else hold.r = true; } }
+    canvas.addEventListener('touchstart', e => { e.preventDefault(); for (const t of e.changedTouches) touches.set(t.identifier, t.clientX); setHolds(); }, { passive: false });
+    canvas.addEventListener('touchend', e => { e.preventDefault(); for (const t of e.changedTouches) touches.delete(t.identifier); setHolds(); }, { passive: false });
+    canvas.addEventListener('touchcancel', () => { touches.clear(); setHolds(); });
+    canvas.addEventListener('mousedown', e => { touches.set('m', e.clientX); setHolds(); });
+    window.addEventListener('mouseup', () => { touches.delete('m'); setHolds(); });
+    window.addEventListener('keydown', e => { if (e.key === 'ArrowLeft' || e.key === 'z') hold.l = true; if (e.key === 'ArrowRight' || e.key === 'm') hold.r = true; });
+    window.addEventListener('keyup', e => { if (e.key === 'ArrowLeft' || e.key === 'z') hold.l = false; if (e.key === 'ArrowRight' || e.key === 'm') hold.r = false; });
+
+    function start() { table(); score = 0; balls = 3; serve(); updateHud(); state = 'play'; }
+    table(); score = 0; balls = 3; serve(); updateHud();
+    W.overlay({ title: '🪩 Pinball', text: 'Hold left or right side to<br>flip. Hit bumpers for points!<br>3 balls.', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
