@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Fishing</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const FISH = [['🐟', 1, 1], ['🐠', 2, 1.3], ['🐡', 3, 1.6], ['🦑', 5, 2], ['🐙', 6, 2.2], ['🦈', 12, 3], ['🐋', 25, 4]];
+
+    // Phases: idle → waiting (bobber floats) → bite (tap fast!) → reeling (crown/hold) → idle.
+    let phase, timer, fish, dist, tension, pull, score, timeLeft, msg = '', msgT = 0, holding = false, reelInput = 0, state = 'ready', t = 0;
+
+    function reset() { phase = 'idle'; score = 0; timeLeft = 60; fish = null; updateHud(); }
+    function updateHud() { hud.innerHTML = `${score}<small>${Math.ceil(timeLeft)}s</small>`; }
+    function say(m) { msg = m; msgT = 1.3; }
+
+    function tap() {
+      if (state !== 'play') return;
+      if (phase === 'idle') { phase = 'waiting'; timer = W.rand(1.2, 3.5); say('Cast! Wait for a bite…'); }
+      else if (phase === 'waiting') { phase = 'idle'; say('Too early — fish scared'); }
+      else if (phase === 'bite') {
+        const r = W.rng();
+        const k = r < 0.35 ? 0 : r < 0.6 ? 1 : r < 0.75 ? 2 : r < 0.86 ? 3 : r < 0.93 ? 4 : r < 0.985 ? 5 : 6;
+        fish = { e: FISH[k][0], pts: FISH[k][1], str: FISH[k][2] };
+        phase = 'reel'; dist = 1; tension = 0.3; pull = 0;
+        say('Hooked! Reel it in!');
+      }
+    }
+
+    function update(dt) {
+      t += dt;
+      timeLeft -= dt;
+      if (phase === 'waiting') { timer -= dt; if (timer <= 0) { phase = 'bite'; timer = 0.7; } }
+      else if (phase === 'bite') { timer -= dt; if (timer <= 0) { phase = 'idle'; say('It got away…'); } }
+      else if (phase === 'reel') {
+        // Fish thrash in bursts; reeling during a thrash spikes the tension.
+        pull = Math.max(0, pull - dt);
+        if (pull <= 0 && W.rng() < dt * 0.9 * fish.str) pull = W.rand(0.4, 0.9);
+        const reel = Math.min(1.5, reelInput + (holding ? 1 : 0));
+        reelInput = Math.max(0, reelInput - dt * 4);
+        dist -= reel * dt * 0.35 / Math.sqrt(fish.str);
+        dist += (pull > 0 ? 0.12 * fish.str : 0.02) * dt;
+        tension += (reel * (pull > 0 ? 1.6 : 0.5) - 0.7) * dt;
+        tension = W.clamp(tension, 0, 1.2);
+        if (tension >= 1) { phase = 'idle'; fish = null; say('SNAP! Line broke 💥'); }
+        else if (dist >= 1.4) { phase = 'idle'; fish = null; say('It swam off…'); }
+        else if (dist <= 0) { score += fish.pts; say(`Caught ${fish.e} +${fish.pts}`); phase = 'idle'; fish = null; }
+      }
+      updateHud();
+      if (timeLeft <= 0) {
+        state = 'over';
+        const best = W.best('fishing', score);
+        W.overlay({ title: 'Time\'s up! 🎣', big: score, text: `Best ${best}`, button: 'Again', onStart: start });
+      }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const sea = h * 0.35;
+      const sky = ctx.createLinearGradient(0, 0, 0, sea);
+      sky.addColorStop(0, '#ffb36b'); sky.addColorStop(1, '#ffe2b8');
+      ctx.fillStyle = sky; ctx.fillRect(0, 0, w, sea);
+      const water = ctx.createLinearGradient(0, sea, 0, h);
+      water.addColorStop(0, '#2b8fd6'); water.addColorStop(1, '#0b2a5a');
+      ctx.fillStyle = water; ctx.fillRect(0, sea, w, h - sea);
+      ctx.strokeStyle = '#ffffff33'; ctx.lineWidth = 1;
+      for (let k = 0; k < 5; k++) { ctx.beginPath(); const y = sea + 6 + k * 10; ctx.moveTo(0, y); for (let x = 0; x <= w; x += 10) ctx.lineTo(x, y + Math.sin(x * 0.1 + t * 2 + k) * 1.5); ctx.stroke(); }
+      // Boat and rod.
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000';
+      ctx.font = '30px sans-serif'; ctx.fillText('🛶', w * 0.18, sea - 4);
+      const tipX = w * 0.42, tipY = sea - 32;
+      ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(w * 0.2, sea - 10); ctx.lineTo(tipX, tipY); ctx.stroke();
+      if (phase !== 'idle') {
+        const bx = w * 0.72, by = sea + (phase === 'bite' ? 5 + Math.sin(t * 40) * 2 : Math.sin(t * 3) * 1.5);
+        const fy = phase === 'reel' ? sea + 15 + (1 - dist) * 0 + dist * (h - sea - 30) : by;
+        const fx = phase === 'reel' ? tipX + (bx - tipX) * Math.min(1, dist) + Math.sin(t * 9) * (pull > 0 ? 6 : 2) : bx;
+        ctx.strokeStyle = phase === 'reel' && tension > 0.75 ? '#ff453a' : '#ffffffcc'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(fx, fy); ctx.stroke();
+        if (phase === 'reel') { ctx.font = `${Math.round(18 + fish.str * 3)}px sans-serif`; ctx.fillText(fish.e, fx, fy + 6); }
+        else { ctx.fillStyle = '#ff453a'; ctx.beginPath(); ctx.arc(bx, by, 4, Math.PI, 0); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bx, by, 4, 0, Math.PI); ctx.fill(); }
+        if (phase === 'bite') { ctx.fillStyle = '#fff'; ctx.font = '900 22px -apple-system, system-ui'; ctx.fillText('!', bx, by - 16); }
+      }
+      if (phase === 'reel') {
+        // Tension meter.
+        ctx.fillStyle = '#0006'; ctx.fillRect(w - 16, sea + 10, 8, h - sea - 20);
+        const th = (h - sea - 22) * Math.min(1, tension);
+        ctx.fillStyle = tension > 0.75 ? '#ff453a' : tension > 0.45 ? '#ffd60a' : '#30d158';
+        ctx.fillRect(w - 15, h - 11 - th, 6, th);
+        ctx.fillStyle = '#fff'; ctx.font = '600 9px -apple-system, system-ui';
+        ctx.fillText(pull > 0 ? 'PULLING! ease off' : 'turn Crown / hold', w / 2, h - 8);
+      } else if (state === 'play' && phase === 'idle') {
+        ctx.fillStyle = '#fff'; ctx.font = '600 11px -apple-system, system-ui'; ctx.fillText('Tap to cast', w / 2, h * 0.7);
+      }
+      if (msgT > 0) { msgT -= dt; ctx.globalAlpha = Math.min(1, msgT * 3); ctx.fillStyle = '#fff'; ctx.font = '800 13px -apple-system, system-ui'; ctx.fillText(msg, w / 2, sea + 22); ctx.globalAlpha = 1; }
+    }
+
+    W.pointer(canvas, { down: () => { if (phase === 'reel') holding = true; else tap(); }, up: () => (holding = false) });
+    W.crown(d => { if (phase === 'reel') reelInput = Math.min(1.5, reelInput + Math.abs(d) * 0.02); });
+    window.addEventListener('keydown', e => { if (e.key === ' ') { if (phase === 'reel') holding = true; else tap(); } });
+    window.addEventListener('keyup', e => { if (e.key === ' ') holding = false; });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🎣 Fishing', text: 'Tap to cast, tap on the bite!<br>Turn the Crown to reel —<br>ease off when it pulls.', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
