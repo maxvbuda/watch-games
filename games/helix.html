@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Helix Drop</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // Each floor is a ring of 12 segments (0 solid, 1 gap, 2 danger). Spin the tower so the bouncing ball drops through gaps.
+    const SEGS = 12, GAPY = () => view.h * 0.22;
+    let floors, spin, ball, camY, passed, state = 'ready', streak = 0, hue = 0;
+
+    function makeFloor(i) {
+      const f = new Array(SEGS).fill(0);
+      const gap = W.randInt(0, SEGS - 1), gw = W.randInt(2, 3);
+      for (let k = 0; k < gw; k++) f[(gap + k) % SEGS] = 1;
+      const danger = Math.min(4, Math.floor(i / 6));
+      for (let k = 0; k < danger; k++) { const j = W.randInt(0, SEGS - 1); if (!f[j]) f[j] = 2; }
+      return f;
+    }
+    function reset() { floors = []; for (let i = 0; i < 12; i++) floors.push(i === 0 ? [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] : makeFloor(i)); spin = 0; ball = { y: -GAPY() * 0.6, vy: 0 }; camY = 0; passed = 0; streak = 0; hud.textContent = '0'; }
+
+    // Segment directly under the ball (ball is at the front-centre of the tower).
+    function segUnder(f) { const a = ((-spin % 1) + 1) % 1; return f[Math.floor(a * SEGS + SEGS / 4) % SEGS]; }
+
+    function update(dt) {
+      ball.vy += view.h * 3.2 * dt;
+      ball.y += ball.vy * dt;
+      const fi = Math.floor(ball.y / GAPY() + 1e-6) + 1;   // next floor below
+      if (ball.vy > 0 && ball.y >= fi * GAPY() - 6 && fi < floors.length) {
+        const f = floors[fi];
+        const s = segUnder(f);
+        if (s === 1 || (streak >= 3 && s !== undefined)) {
+          // Falls through (a 3-floor streak smashes through anything).
+          if (!f.passedAt) { f.passedAt = true; passed++; streak++; hud.textContent = passed; if (streak >= 3 && s !== 1) floors[fi] = new Array(SEGS).fill(1); }
+        } else if (s === 2) { return die(); }
+        else { ball.y = fi * GAPY() - 6; ball.vy = -view.h * 1.05; streak = 0; }
+      }
+      camY += (ball.y - view.h * 0.3 - camY) * Math.min(1, dt * 6);
+      while (floors.length < Math.floor(ball.y / GAPY()) + 10) floors.push(makeFloor(floors.length));
+    }
+    function die() {
+      state = 'over';
+      const best = W.best('helix', passed);
+      setTimeout(() => W.overlay({ title: 'Splat! 🔴', big: passed, text: `Floors passed · best ${best}`, button: 'Again', onStart: start }), 400);
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      hue = (hue + dt * 8) % 360;
+      ctx.fillStyle = `hsl(${hue},40%,12%)`; ctx.fillRect(0, 0, w, h);
+      const cx = w / 2, R = w * 0.4, pole = w * 0.08;
+      ctx.fillStyle = '#e5e5ea33'; ctx.fillRect(cx - pole, 0, pole * 2, h);
+      const first = Math.max(0, Math.floor((camY - 20) / GAPY()));
+      for (let i = first; i < floors.length; i++) {
+        const y = i * GAPY() - camY + 30;
+        if (y > h + 20) break;
+        const f = floors[i];
+        // Draw the ring as an ellipse split into segments, back half dimmer.
+        for (let k = 0; k < SEGS; k++) {
+          if (f[k] === 1) continue;
+          const a0 = (k / SEGS + spin) * Math.PI * 2, a1 = ((k + 1) / SEGS + spin) * Math.PI * 2;
+          ctx.fillStyle = f[k] === 2 ? '#ff453a' : `hsl(${(hue + i * 12) % 360},70%,${Math.sin((a0 + a1) / 2) > 0 ? 60 : 38}%)`;
+          ctx.beginPath(); ctx.moveTo(cx, y);
+          ctx.ellipse(cx, y, R, R * 0.28, 0, a0, a1); ctx.closePath(); ctx.fill();
+        }
+        ctx.fillStyle = '#d1d1d6'; ctx.beginPath(); ctx.ellipse(cx, y, pole, pole * 0.28, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      const by = ball.y - camY + 30 - 6;
+      ctx.fillStyle = streak >= 3 ? '#ffd60a' : '#ff9f0a';
+      ctx.beginPath(); ctx.arc(cx, by + R * 0.28 - 4, 6, 0, Math.PI * 2); ctx.fill();
+      if (streak >= 3) { ctx.fillStyle = '#ffd60a'; ctx.font = '800 11px -apple-system, system-ui'; ctx.textAlign = 'center'; ctx.fillText('SMASH! 🔥', w / 2, h - 10); }
+    }
+
+    // Spin with the Crown, or drag sideways.
+    let lastX = null;
+    W.pointer(canvas, { down: p => (lastX = p.x), move: p => { if (lastX !== null && state === 'play') { spin += (p.x - lastX) / (view.w * 1.2); lastX = p.x; } }, up: () => (lastX = null) });
+    W.crown(d => { if (state === 'play') spin += d * 0.0025; });
+    window.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') spin -= 0.03; if (e.key === 'ArrowRight') spin += 0.03; });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🌀 Helix Drop', text: 'Turn the Crown (or drag)<br>to spin the tower. Drop<br>through gaps, avoid red!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
