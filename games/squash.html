@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Squash</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // Solo rally against the wall. The ball speeds up every hit. Crown or drag moves the racket.
+    let px, ball, hits, state = 'ready', flash = 0;
+    const PW = () => view.w * 0.3, PY = () => view.h - 16, BR = () => 5;
+    function reset() { px = view.w / 2; hits = 0; ball = { x: view.w / 2, y: view.h * 0.4, vx: view.w * 0.4 * (W.rng() < 0.5 ? -1 : 1), vy: view.h * 0.6 }; hud.textContent = '0'; }
+    function update(dt) {
+      const steps = 3;
+      for (let s = 0; s < steps; s++) {
+        const h = dt / steps, r = BR();
+        ball.x += ball.vx * h; ball.y += ball.vy * h;
+        if (ball.x < r + 4) { ball.x = r + 4; ball.vx = Math.abs(ball.vx); }
+        if (ball.x > view.w - r - 4) { ball.x = view.w - r - 4; ball.vx = -Math.abs(ball.vx); }
+        if (ball.y < 34 + r) { ball.y = 34 + r; ball.vy = Math.abs(ball.vy); flash = 0.1; }
+        if (ball.vy > 0 && ball.y + r >= PY() && ball.y + r <= PY() + 8 && Math.abs(ball.x - px) < PW() / 2 + r) {
+          const off = (ball.x - px) / (PW() / 2), sp = Math.hypot(ball.vx, ball.vy) * 1.04;
+          ball.vx = Math.sin(off * 1.1) * sp; ball.vy = -Math.cos(off * 1.1) * sp; ball.y = PY() - r;
+          hits++; hud.textContent = hits;
+        }
+      }
+      if (ball.y > view.h + 10) { state = 'over'; const best = W.best('squash', hits); W.overlay({ title: 'Missed!', big: hits, text: `hits · best ${best}`, button: 'Again', onStart: start }); }
+    }
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#d9c3a0'; ctx.fillRect(0, 0, w, h);
+      flash = Math.max(0, flash - dt);
+      ctx.fillStyle = flash > 0 ? '#fff' : '#f2e6d0'; ctx.fillRect(4, 30, w - 8, 4);
+      ctx.strokeStyle = '#ff453a'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(4, h * 0.55); ctx.lineTo(w - 4, h * 0.55); ctx.moveTo(w / 2, h * 0.55); ctx.lineTo(w / 2, h); ctx.stroke();
+      ctx.fillStyle = '#7a5a3a'; ctx.fillRect(0, 30, 4, h); ctx.fillRect(w - 4, 30, 4, h);
+      ctx.fillStyle = '#0005'; ctx.beginPath(); ctx.ellipse(ball.x + 3, ball.y + 4, BR(), BR() * 0.6, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(ball.x, ball.y, BR(), 0, 7); ctx.fill();
+      ctx.fillStyle = '#0a84ff'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(px - PW() / 2, PY(), PW(), 6, 3) : ctx.rect(px - PW() / 2, PY(), PW(), 6); ctx.fill();
+    }
+    const setX = x => (px = W.clamp(x, PW() / 2, view.w - PW() / 2));
+    W.pointer(canvas, { down: p => setX(p.x), move: p => setX(p.x) });
+    W.crown(d => setX(px + d * 0.9));
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🎾 Squash', text: 'Keep the rally going!<br>Drag or turn the Crown.<br>It gets faster every hit.', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
