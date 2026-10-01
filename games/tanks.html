@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Tank Battle</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>.hud { color: #3b2a14; text-shadow: none; } .hud small { color: #6b5230; } .back { background: rgba(60, 40, 10, 0.35); }</style>
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // Arena layouts (normalised rects x, y, w, h).
+    const LAYOUTS = [
+      [[0.45, 0.2, 0.1, 0.25], [0.45, 0.55, 0.1, 0.25]],
+      [[0.2, 0.45, 0.25, 0.08], [0.55, 0.45, 0.25, 0.08], [0.45, 0.15, 0.1, 0.15], [0.45, 0.7, 0.1, 0.15]],
+      [[0.15, 0.3, 0.08, 0.4], [0.77, 0.3, 0.08, 0.4], [0.38, 0.47, 0.24, 0.06]],
+      [[0.25, 0.25, 0.12, 0.12], [0.63, 0.25, 0.12, 0.12], [0.25, 0.63, 0.12, 0.12], [0.63, 0.63, 0.12, 0.12]],
+    ];
+    const TYPES = { brown: { col: '#9a6b3c', speed: 0, fire: 2.1, bspeed: 75, bounce: 1 }, grey: { col: '#8e8e93', speed: 22, fire: 1.6, bspeed: 86, bounce: 1 }, green: { col: '#4c9a3c', speed: 16, fire: 1.0, bspeed: 130, bounce: 1, smart: true } };
+    let A, walls, me, foes, bullets, level, lives, state = 'ready', parts = [], marks = [], msg = '', msgT = 0;
+    const TR = 6.5;
+
+    function arena() { return { l: 6, t: 32, r: view.w - 6, b: view.h - 6 }; }
+    function setup() {
+      A = arena();
+      const L = LAYOUTS[(level - 1) % LAYOUTS.length], W2 = A.r - A.l, H2 = A.b - A.t;
+      walls = L.map(([x, y, w, h]) => ({ x: A.l + x * W2, y: A.t + y * H2, w: w * W2, h: h * H2 }));
+      me = { x: A.l + W2 * 0.5, y: A.b - 16, a: -Math.PI / 2, ta: -Math.PI / 2, cd: 0, me: true, col: '#0a84ff', alive: true };
+      const n = Math.min(1 + Math.floor((level + 1) / 2), 5), kinds = level === 1 ? ['brown'] : level < 4 ? ['brown', 'grey'] : ['brown', 'grey', 'green'];
+      foes = [];
+      for (let k = 0; k < n; k++) {
+        const kind = k === 0 && level >= 3 ? 'green' : W.pick(kinds), T = TYPES[kind];
+        foes.push({ kind, ...T, x: A.l + W2 * (0.15 + (k % 3) * 0.35), y: A.t + 16 + Math.floor(k / 3) * 30, a: Math.PI / 2, ta: Math.PI / 2, cd: W.rand(2.2, 3.5), alive: true, wander: W.rand(0, 6.28) });
+      }
+      bullets = []; marks = [];
+      updateHud();
+    }
+    function reset() { level = 1; lives = 3; setup(); }
+    function updateHud() { hud.innerHTML = `Lv ${level}<small>${'💙'.repeat(lives)} · ${foes.filter(f => f.alive).length} left</small>`; }
+
+    const inWall = (x, y, r) => walls.some(wl => x + r > wl.x && x - r < wl.x + wl.w && y + r > wl.y && y - r < wl.y + wl.h) || x - r < A.l || x + r > A.r || y - r < A.t || y + r > A.b;
+    function moveTank(t, dx, dy) {
+      if (!inWall(t.x + dx, t.y, TR)) t.x += dx;
+      if (!inWall(t.x, t.y + dy, TR)) t.y += dy;
+    }
+    function fire(t, ang) {
+      if (t.cd > 0 || !t.alive) return;
+      if (bullets.filter(b => b.owner === t).length >= (t.me ? 4 : 2)) return;
+      const sp = t.me ? 115 : t.bspeed;
+      bullets.push({ x: t.x + Math.cos(ang) * (TR + 4), y: t.y + Math.sin(ang) * (TR + 4), vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, bounces: t.me ? 1 : t.bounce, owner: t });
+      t.cd = t.me ? 0.35 : t.fire * W.rand(0.8, 1.2);
+      t.ta = ang;
+      W.sfx(t.me ? 220 : 160, { type: 'square', dur: 0.06, vol: 0.05, slide: 80 });
+    }
+
+    // Line of sight (no walls) between two points.
+    function clearShot(x0, y0, x1, y1) {
+      // Sample finely with a little margin so grazing a wall corner doesn't count as clear.
+      const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 1.5);
+      for (let k = 1; k < steps; k++) { const x = x0 + (x1 - x0) * k / steps, y = y0 + (y1 - y0) * k / steps; if (inWall(x, y, 2.2)) return false; }
+      return true;
+    }
+    // Smart tanks try banking off the arena edges: aim at the player's mirror image.
+    function aimFor(f) {
+      if (clearShot(f.x, f.y, me.x, me.y)) return Math.atan2(me.y - f.y, me.x - f.x);
+      if (!f.smart) return null;
+      const mirrors = [[2 * A.l - me.x, me.y], [2 * A.r - me.x, me.y], [me.x, 2 * A.t - me.y], [me.x, 2 * A.b - me.y]];
+      for (const [mx, my] of W.shuffle(mirrors)) {
+        const a = Math.atan2(my - f.y, mx - f.x);
+        // Where the shot meets the wall; check both legs are clear.
+        const tx = mx === me.x ? null : (Math.abs(mx - (2 * A.l - me.x)) < 1 ? A.l : A.r), ty = my === me.y ? null : (Math.abs(my - (2 * A.t - me.y)) < 1 ? A.t : A.b);
+        let hx, hy;
+        if (tx !== null) { hx = tx; hy = f.y + (my - f.y) * (tx - f.x) / (mx - f.x); } else { hy = ty; hx = f.x + (mx - f.x) * (ty - f.y) / (my - f.y); }
+        if (clearShot(f.x, f.y, hx, hy) && clearShot(hx, hy, me.x, me.y)) return a;
+      }
+      return null;
+    }
+
+    function boom(x, y, col) {
+      for (let k = 0; k < 18; k++) parts.push({ x, y, vx: W.rand(-80, 80), vy: W.rand(-80, 80), t: 0.6, c: W.pick([col, '#ff9f0a', '#ffd60a', '#555']) });
+      marks.push({ x, y });
+      W.sfx(90, { type: 'sawtooth', dur: 0.35, vol: 0.12, slide: 40 });
+    }
+
+    function update(dt) {
+      // You.
+      if (joy && joy.moved && me.alive) {
+        const dx = joy.x - joy.sx, dy = joy.y - joy.sy, d = Math.hypot(dx, dy);
+        if (d > 4) { const k = Math.min(1, d / 25), a = Math.atan2(dy, dx); me.a = a; moveTank(me, Math.cos(a) * 42 * k * dt, Math.sin(a) * 42 * k * dt); }
+      }
+      me.cd = Math.max(0, me.cd - dt);
+      // Enemies: wander, keep turret on you, shoot when they have a shot.
+      for (const f of foes) {
+        if (!f.alive) continue;
+        f.cd -= dt;
+        if (f.speed) {
+          f.wander += W.rand(-2, 2) * dt;
+          // Dodge: sidestep bullets heading their way.
+          const threat = bullets.find(b => b.owner !== f && Math.hypot(b.x - f.x, b.y - f.y) < 40 && (b.vx * (f.x - b.x) + b.vy * (f.y - b.y)) > 0);
+          const a = threat ? Math.atan2(threat.vy, threat.vx) + Math.PI / 2 : f.wander;
+          const ox = f.x, oy = f.y;
+          moveTank(f, Math.cos(a) * f.speed * dt, Math.sin(a) * f.speed * dt);
+          if (f.x === ox && f.y === oy) f.wander += Math.PI / 2;
+          f.a = a;
+        }
+        const aim = aimFor(f);
+        if (aim !== null) { f.ta += Math.atan2(Math.sin(aim - f.ta), Math.cos(aim - f.ta)) * Math.min(1, dt * 4); if (f.cd <= 0 && Math.abs(Math.atan2(Math.sin(aim - f.ta), Math.cos(aim - f.ta))) < 0.15) fire(f, f.ta); }
+        else f.ta += dt * 0.6;
+      }
+      // Bullets: bounce once off walls, destroy tanks and each other.
+      for (const b of bullets) {
+        const steps = 3;
+        for (let s = 0; s < steps && !b.dead; s++) {
+          const nx = b.x + b.vx * dt / steps, ny = b.y + b.vy * dt / steps;
+          const hitX = inWall(nx, b.y, 1.5), hitY = inWall(b.x, ny, 1.5);
+          if (hitX || hitY) {
+            if (b.bounces-- <= 0) { b.dead = true; parts.push({ x: b.x, y: b.y, vx: 0, vy: 0, t: 0.2, c: '#fff' }); break; }
+            if (hitX) b.vx = -b.vx; if (hitY) b.vy = -b.vy;
+            W.sfx(600, { type: 'square', dur: 0.02, vol: 0.02 });
+          } else { b.x = nx; b.y = ny; }
+          for (const t of [me, ...foes]) if (t.alive && Math.hypot(t.x - b.x, t.y - b.y) < TR + 1.5) { t.alive = false; b.dead = true; boom(t.x, t.y, t.col || TYPES[t.kind].col); }
+        }
+      }
+      for (let i = 0; i < bullets.length; i++) for (let j = i + 1; j < bullets.length; j++) { const a = bullets[i], c = bullets[j]; if (!a.dead && !c.dead && Math.hypot(a.x - c.x, a.y - c.y) < 3.5) { a.dead = c.dead = true; parts.push({ x: a.x, y: a.y, vx: 0, vy: 0, t: 0.25, c: '#fff' }); } }
+      bullets = bullets.filter(b => !b.dead);
+      updateHud();
+      if (!me.alive) {
+        lives--; state = 'wait';
+        if (lives <= 0) { const best = W.best('tanks', level - 1); setTimeout(() => { state = 'over'; W.overlay({ title: 'Tank destroyed!', big: `Level ${level}`, text: `Best: cleared ${best} levels`, button: 'Again', onStart: start }); }, 900); }
+        else setTimeout(() => { setup(); state = 'play'; msg = `${lives} ${lives > 1 ? 'tanks' : 'tank'} left`; msgT = 1.2; }, 1100);
+      } else if (foes.every(f => !f.alive)) {
+        state = 'wait'; W.best('tanks', level);
+        W.sfx(660, { type: 'triangle', dur: 0.4, vol: 0.1, slide: 1320 });
+        setTimeout(() => { level++; if (level % 3 === 0) lives = Math.min(5, lives + 1); setup(); state = 'play'; msg = `Level ${level}!`; msgT = 1.2; }, 1300);
+      }
+    }
+
+    function tank(t, col) {
+      ctx.save(); ctx.translate(t.x, t.y);
+      ctx.save(); ctx.rotate(t.a);
+      ctx.fillStyle = '#0003'; ctx.fillRect(-TR + 1, -TR + 2, TR * 2, TR * 2);
+      ctx.fillStyle = '#333'; ctx.fillRect(-TR, -TR, TR * 2, 3); ctx.fillRect(-TR, TR - 3, TR * 2, 3);
+      ctx.fillStyle = col; ctx.fillRect(-TR + 1, -TR + 2, TR * 2 - 2, TR * 2 - 4);
+      ctx.restore();
+      ctx.rotate(t.ta);
+      ctx.fillStyle = '#222'; ctx.fillRect(0, -1.6, TR + 5, 3.2);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, TR * 0.55, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#0005'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.restore();
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#c9a66b'; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#e3c891'; ctx.fillRect(A.l, A.t, A.r - A.l, A.b - A.t);
+      ctx.strokeStyle = '#d4b47a'; ctx.lineWidth = 1;
+      for (let x = A.l; x < A.r; x += 16) { ctx.beginPath(); ctx.moveTo(x, A.t); ctx.lineTo(x, A.b); ctx.stroke(); }
+      for (const m of marks) { ctx.fillStyle = '#0002'; ctx.beginPath(); ctx.arc(m.x, m.y, 9, 0, 7); ctx.fill(); ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.fillText('✖', m.x, m.y); }
+      for (const wl of walls) { ctx.fillStyle = '#8b6b3c'; ctx.fillRect(wl.x, wl.y + 2, wl.w, wl.h); ctx.fillStyle = '#b08850'; ctx.fillRect(wl.x, wl.y, wl.w, wl.h - 2); ctx.strokeStyle = '#7a5a30'; ctx.strokeRect(wl.x + 0.5, wl.y + 0.5, wl.w - 1, wl.h - 3); }
+      ctx.strokeStyle = '#7a5a30'; ctx.lineWidth = 3; ctx.strokeRect(A.l, A.t, A.r - A.l, A.b - A.t);
+      // Aim guide while you're not driving.
+      if (me.alive && state === 'play') { ctx.strokeStyle = '#0a84ff55'; ctx.setLineDash([2, 4]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(me.x, me.y); ctx.lineTo(me.x + Math.cos(me.ta) * 40, me.y + Math.sin(me.ta) * 40); ctx.stroke(); ctx.setLineDash([]); }
+      for (const f of foes) if (f.alive) tank(f, f.col);
+      if (me.alive) tank(me, me.col);
+      for (const b of bullets) { ctx.fillStyle = b.owner.me ? '#fff' : '#ffd60a'; ctx.beginPath(); ctx.arc(b.x, b.y, 1.8, 0, 7); ctx.fill(); ctx.strokeStyle = '#0006'; ctx.lineWidth = 0.8; ctx.stroke(); }
+      for (const p of parts) { p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.95; p.vy *= 0.95; ctx.fillStyle = p.c; ctx.globalAlpha = Math.max(0, p.t * 2); ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, 7); ctx.fill(); }
+      ctx.globalAlpha = 1;
+      parts = parts.filter(p => p.t > 0);
+      if (joy && joy.moved) { ctx.strokeStyle = '#0003'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(joy.sx, joy.sy, 20, 0, 7); ctx.stroke(); }
+      if (msgT > 0) { msgT -= dt; ctx.globalAlpha = Math.min(1, msgT * 3); ctx.fillStyle = '#3b2a14'; ctx.font = '800 15px -apple-system, system-ui'; ctx.textAlign = 'center'; ctx.fillText(msg, w / 2, h * 0.5); ctx.globalAlpha = 1; }
+    }
+
+    // Drag = drive (floating joystick). Tap = fire toward the tap. Crown turns the turret; tap your tank to fire that way.
+    let joy = null;
+    W.pointer(canvas, {
+      down: p => { joy = { sx: p.x, sy: p.y, x: p.x, y: p.y, moved: false }; },
+      move: p => { if (!joy) return; joy.x = p.x; joy.y = p.y; if (Math.hypot(p.x - joy.sx, p.y - joy.sy) > 8) joy.moved = true; },
+      up: p => {
+        if (joy && !joy.moved && state === 'play') { const onMe = Math.hypot(p.x - me.x, p.y - me.y) < 16; fire(me, onMe ? me.ta : Math.atan2(p.y - me.y, p.x - me.x)); }
+        joy = null;
+      },
+    });
+    W.crown(d => { if (me) me.ta += d * 0.012; });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🪖 Tank Battle', text: 'Drag to drive. Tap to fire<br>(shots bounce once!). Crown<br>turns the turret. Clear each level!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
