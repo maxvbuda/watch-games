@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Drop Merge</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const COLS = 5, ROWS = 6;
+    // Tap a column to drop the next number. Equal neighbours merge into double. Don't let a column overflow!
+    let g, next, score, state = 'ready', pulse = [];
+    const color = v => `hsl(${(Math.log2(v) * 37) % 360},70%,55%)`;
+
+    function reset() { g = Array.from({ length: COLS }, () => []); next = W.pick([2, 2, 4, 4, 8]); score = 0; updateHud(); }
+    function updateHud() { hud.innerHTML = `${score}<small>next ${next}</small>`; }
+
+    function drop(c) {
+      if (state !== 'play') return;
+      if (g[c].length >= ROWS) return end();
+      g[c].push(next);
+      settle(c, g[c].length - 1);
+      const max = Math.max(2, ...g.flat());
+      next = W.pick([2, 4, 8, 16, 32, 64].filter(v => v <= Math.max(8, max / 4)));
+      updateHud();
+      if (g.every(col => col.length >= ROWS)) end();
+    }
+    // Merge the tile at (c, r) with equal neighbours (left, right, below), then repeat for the result.
+    function settle(c, r) {
+      const v = g[c][r];
+      let merged = 0;
+      for (const nc of [c - 1, c + 1]) if (nc >= 0 && nc < COLS && g[nc][r] === v) { g[nc].splice(r, 1); merged++; }
+      if (r > 0 && g[c][r - 1] === v) { g[c].splice(r, 1); r--; merged++; }
+      if (!merged) return;
+      g[c][r] = v * Math.pow(2, merged);
+      score += g[c][r];
+      pulse.push({ c, r, t: 0.25 });
+      // Columns that lost a tile may now have new neighbours meeting; re-check everything nearby.
+      settle(c, r);
+      for (const nc of [c - 1, c + 1]) if (nc >= 0 && nc < COLS) for (let k = 0; k < g[nc].length; k++) if ((nc > 0 && g[nc - 1][k] === g[nc][k]) || (nc < COLS - 1 && g[nc + 1][k] === g[nc][k])) { settle(nc, k); break; }
+    }
+    function end() { state = 'over'; const best = W.best('dropmerge', score); setTimeout(() => W.overlay({ title: 'Column full!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 300); }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#111'; ctx.fillRect(0, 0, w, h);
+      const cw = (w - 8) / COLS, ch = Math.min(cw, (h - 52) / ROWS), ox = 4, oy = h - ch * ROWS - 4;
+      for (let c = 0; c < COLS; c++) { ctx.fillStyle = c % 2 ? '#1c1c1e' : '#222226'; ctx.fillRect(ox + c * cw, oy, cw, ch * ROWS); }
+      ctx.strokeStyle = '#ff453a55'; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(w, oy); ctx.stroke(); ctx.setLineDash([]);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (let c = 0; c < COLS; c++) g[c].forEach((v, r) => {
+        const p = pulse.find(q => q.c === c && q.r === r), grow = p ? p.t * 8 : 0;
+        const x = ox + c * cw + 2 - grow / 2, y = oy + (ROWS - 1 - r) * ch + 2 - grow / 2;
+        ctx.fillStyle = color(v); ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, cw - 4 + grow, ch - 4 + grow, 6) : ctx.rect(x, y, cw - 4, ch - 4); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = `800 ${Math.round(ch * (v >= 1000 ? 0.3 : 0.42))}px -apple-system, system-ui`; ctx.fillText(v, x + (cw - 4 + grow) / 2, y + (ch - 4 + grow) / 2);
+      });
+      for (const p of pulse) p.t -= dt;
+      pulse = pulse.filter(p => p.t > 0);
+      ctx.fillStyle = color(next); ctx.beginPath(); ctx.arc(w / 2, oy - 14, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = '800 10px -apple-system, system-ui'; ctx.fillText(next, w / 2, oy - 14);
+    }
+    W.pointer(canvas, { down: p => drop(W.clamp(Math.floor((p.x - 4) / ((view.w - 8) / COLS)), 0, COLS - 1)) });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🔢 Drop Merge', text: 'Tap a column to drop the<br>next number. Matching<br>neighbours merge!', onStart: start });
+    W.loop(render);
+  </script>
+</body>
+</html>
