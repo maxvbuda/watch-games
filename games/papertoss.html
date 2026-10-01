@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Paper Toss</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    let ball, wind, streak, best0, misses, state = 'ready', msg = '', msgT = 0;
+    const BIN = () => ({ x: view.w / 2, y: view.h * 0.36, r: view.w * 0.1 });
+
+    function newThrow() { ball = null; wind = Math.round(W.rand(-1, 1) * (1 + streak * 0.15) * 10) / 10; }
+    function updateHud() { hud.innerHTML = `${streak}<small>${'🗑️'.repeat(3 - misses)}</small>`; }
+
+    // Flick up: horizontal flick + wind decide where it lands; it travels "into" the screen toward the bin.
+    function flick(dx, dy, ms) {
+      if (state !== 'play' || ball || dy > -25) return;
+      ball = { t: 0, x0: view.w / 2, dx: dx * 1.1, dur: 0.85 };
+    }
+
+    function update(dt) {
+      if (!ball) return;
+      ball.t += dt / ball.dur;
+      if (ball.t >= 1) {
+        const land = ball.x0 + ball.dx + wind * view.w * 0.11;
+        const off = Math.abs(land - BIN().x);
+        const inBin = off < BIN().r * 0.8;
+        if (inBin) { streak++; msg = off < BIN().r * 0.3 ? 'Swish! 🎯' : 'In! ✅'; W.best('papertoss', streak); }
+        else { misses++; msg = off < BIN().r * 1.3 ? 'Rim! 😬' : 'Miss ❌'; }
+        msgT = 0.9;
+        updateHud();
+        if (misses >= 3) {
+          state = 'over';
+          setTimeout(() => W.overlay({ title: 'Out of throws', big: streak, text: `Best ${W.best('papertoss')}`, button: 'Again', onStart: start }), 600);
+        }
+        newThrow();
+      }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#d9cfc1'; ctx.fillRect(0, 0, w, h * 0.45);
+      ctx.fillStyle = '#8b6b4a'; ctx.fillRect(0, h * 0.45, w, h);
+      ctx.fillStyle = '#a07a52'; for (let i = 0; i < 6; i++) ctx.fillRect(0, h * 0.45 + i * 18, w, 1);
+      // Window, desk lamp vibe.
+      ctx.fillStyle = '#9fd8ff'; ctx.fillRect(w * 0.08, h * 0.12, w * 0.25, h * 0.2);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(w * 0.08, h * 0.12, w * 0.25, h * 0.2);
+      const b = BIN();
+      ctx.fillStyle = '#5a5a60';
+      ctx.beginPath(); ctx.moveTo(b.x - b.r, b.y); ctx.lineTo(b.x + b.r, b.y); ctx.lineTo(b.x + b.r * 0.75, b.y + b.r * 1.5); ctx.lineTo(b.x - b.r * 0.75, b.y + b.r * 1.5); ctx.fill();
+      ctx.fillStyle = '#2c2c2e'; ctx.beginPath(); ctx.ellipse(b.x, b.y, b.r, b.r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+      // Wind sock / fan.
+      ctx.fillStyle = '#000'; ctx.font = '700 11px -apple-system, system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(`🌀 ${wind > 0 ? '→' : wind < 0 ? '←' : '·'} ${Math.abs(wind).toFixed(1)}`, w * 0.75, h * 0.18);
+      const t = ball ? ball.t : 0;
+      const x = ball ? ball.x0 + (ball.dx + wind * view.w * 0.11 * t) * t : w / 2;
+      const y = ball ? h * 0.85 + (b.y - h * 0.85) * t - Math.sin(Math.PI * t) * h * 0.3 : h * 0.85;
+      const r = view.w * (0.06 - 0.03 * t);
+      ctx.fillStyle = '#f2f2f7'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#c7c7cc'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x - r * 0.6, y - r * 0.2); ctx.lineTo(x + r * 0.3, y + r * 0.5); ctx.moveTo(x - r * 0.1, y - r * 0.7); ctx.lineTo(x + r * 0.5, y - r * 0.1); ctx.stroke();
+      if (msgT > 0) { msgT -= dt; ctx.globalAlpha = Math.min(1, msgT * 3); ctx.fillStyle = '#fff'; ctx.font = '800 16px -apple-system, system-ui'; ctx.fillText(msg, w / 2, h * 0.62); ctx.globalAlpha = 1; }
+      else if (state === 'play' && !ball && streak === 0 && misses === 0) { ctx.fillStyle = '#fff'; ctx.font = '600 11px -apple-system, system-ui'; ctx.fillText('Flick up — aim against the wind', w / 2, h * 0.65); }
+    }
+
+    let s0 = null;
+    W.pointer(canvas, { down: p => (s0 = p), up: p => { if (s0) flick(p.x - s0.x, p.y - s0.y); s0 = null; } });
+    function start() { streak = 0; misses = 0; newThrow(); updateHud(); state = 'play'; }
+    streak = 0; misses = 0; newThrow(); updateHud();
+    W.overlay({ title: '🗑️ Paper Toss', text: 'Flick the paper into the bin.<br>Aim against the fan\'s wind!<br>3 misses and you\'re out.', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
