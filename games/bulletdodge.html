@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Bullet Dodge</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // Survive the bullet patterns. Drag anywhere — your dot moves with your finger (offset so you can see it).
+    let me, bullets, t, patT, state = 'ready', last = null;
+    const ARENA = () => ({ x: 6, y: 30, w: view.w - 12, h: view.h - 36 });
+    function reset() { const a = ARENA(); me = { x: a.x + a.w / 2, y: a.y + a.h * 0.7 }; bullets = []; t = 0; patT = 1; hud.textContent = '0.0s'; }
+    function pattern() {
+      const a = ARENA(), cx = a.x + a.w / 2, cy = a.y + a.h / 2, sp = view.w * (0.35 + Math.min(t, 60) * 0.008);
+      const k = W.randInt(0, 3);
+      if (k === 0) { const n = 10 + Math.floor(t / 10), off = W.rand(0, 1); for (let i = 0; i < n; i++) { const ang = (i + off) / n * Math.PI * 2; bullets.push({ x: cx, y: a.y + 4, vx: Math.cos(ang) * sp, vy: Math.abs(Math.sin(ang)) * sp + 10, c: '#ff375f' }); } }
+      if (k === 1) { const side = W.rng() < 0.5 ? a.x : a.x + a.w; for (let i = 0; i < 6; i++) bullets.push({ x: side, y: a.y + (i + 0.5) * a.h / 6 + W.rand(-8, 8), vx: (side === a.x ? 1 : -1) * sp, vy: 0, c: '#ffd60a' }); }
+      if (k === 2) { for (let i = 0; i < 5; i++) { const ang = Math.atan2(me.y - a.y, me.x - cx) + (i - 2) * 0.18; bullets.push({ x: cx, y: a.y, vx: Math.cos(ang) * sp * 1.2, vy: Math.sin(ang) * sp * 1.2, c: '#64d2ff' }); } }
+      if (k === 3) { const gap = W.randInt(1, 5); for (let i = 0; i < 7; i++) if (Math.abs(i - gap) > 0) bullets.push({ x: a.x + (i + 0.5) * a.w / 7, y: a.y, vx: 0, vy: sp * 0.9, c: '#30d158' }); }
+    }
+    function update(dt) {
+      t += dt; hud.textContent = t.toFixed(1) + 's';
+      patT -= dt;
+      if (patT <= 0) { pattern(); patT = Math.max(0.55, 1.4 - t * 0.012); }
+      const a = ARENA();
+      for (const b of bullets) { b.x += b.vx * dt; b.y += b.vy * dt; }
+      bullets = bullets.filter(b => b.x > a.x - 10 && b.x < a.x + a.w + 10 && b.y > a.y - 10 && b.y < a.y + a.h + 10);
+      if (bullets.some(b => Math.hypot(b.x - me.x, b.y - me.y) < 5.5)) {
+        state = 'over';
+        const s = Math.round(t * 10) / 10, best = W.best('bulletdodge', s);
+        setTimeout(() => W.overlay({ title: 'Hit!', big: s.toFixed(1) + 's', text: `Best ${best}s`, button: 'Again', onStart: start }), 400);
+      }
+    }
+    function render() {
+      const { w, h } = view, a = ARENA();
+      ctx.fillStyle = '#05050a'; ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#3a3a5c'; ctx.lineWidth = 1.5; ctx.strokeRect(a.x, a.y, a.w, a.h);
+      for (const b of bullets) { ctx.fillStyle = b.c; ctx.beginPath(); ctx.arc(b.x, b.y, 3.5, 0, 7); ctx.fill(); }
+      ctx.fillStyle = state === 'over' ? '#ff453a' : '#fff'; ctx.beginPath(); ctx.arc(me.x, me.y, 3, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#ffffff55'; ctx.beginPath(); ctx.arc(me.x, me.y, 7, 0, 7); ctx.stroke();
+    }
+    W.pointer(canvas, {
+      down: p => (last = p),
+      move: p => { if (!last || state !== 'play') return; const a = ARENA(); me.x = W.clamp(me.x + (p.x - last.x) * 1.2, a.x + 4, a.x + a.w - 4); me.y = W.clamp(me.y + (p.y - last.y) * 1.2, a.y + 4, a.y + a.h - 4); last = p; },
+      up: () => (last = null),
+    });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '💠 Bullet Dodge', text: 'Drag anywhere to move your<br>dot. Survive the patterns<br>as long as you can!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(); });
+  </script>
+</body>
+</html>
