@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Block Blast</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const N = 8;
+    const COLORS = ['#ff453a', '#ff9f0a', '#ffd60a', '#30d158', '#64d2ff', '#0a84ff', '#bf5af2', '#ff375f'];
+    // Shapes as lists of [x, y] cells.
+    const SHAPES = [
+      [[0, 0]], [[0, 0], [1, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0], [2, 0]], [[0, 0], [0, 1], [0, 2]],
+      [[0, 0], [1, 0], [2, 0], [3, 0]], [[0, 0], [0, 1], [0, 2], [0, 3]], [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]], [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]],
+      [[0, 0], [1, 0], [0, 1], [1, 1]], [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1], [0, 2], [1, 2], [2, 2]],
+      [[0, 0], [0, 1], [1, 1]], [[1, 0], [0, 1], [1, 1]], [[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 0], [1, 1]],
+      [[0, 0], [0, 1], [0, 2], [1, 2], [2, 2]], [[2, 0], [2, 1], [0, 2], [1, 2], [2, 2]], [[0, 0], [1, 0], [2, 0], [0, 1], [0, 2]],
+      [[0, 0], [1, 0], [2, 0], [1, 1]], [[1, 0], [0, 1], [1, 1], [2, 1]], [[0, 0], [1, 0], [1, 1], [2, 1]], [[1, 0], [2, 0], [0, 1], [1, 1]],
+    ];
+    let board, tray, score, combo, state = 'ready', drag = null, sel = null, flashes = [], parts = [], pop = 0, best = W.best('blockblast') || 0;
+
+    function geo() {
+      const cs = Math.floor(Math.min((view.w - 10) / N, (view.h - 92) / N));
+      const bx = Math.floor((view.w - cs * N) / 2), by = 32;
+      return { cs, bx, by, trayY: by + cs * N + 8, trayH: view.h - (by + cs * N + 8) - 4 };
+    }
+    // Deal like the real thing: small/medium pieces are common, big ones rarer, and a crowded board gets
+    // friendlier pieces. Every new tray is guaranteed to have at least one piece that fits.
+    function dealPiece() {
+      const fill = board.flat().filter(Boolean).length / (N * N);
+      const weights = SHAPES.map(sh => (sh.length <= 3 ? 3 : sh.length === 4 ? 2.4 : sh.length === 5 ? 1.1 : 0.6) * (sh.length >= 5 && fill > 0.45 ? 0.3 : 1));
+      let r = W.rand(0, weights.reduce((x, y) => x + y, 0));
+      for (let i = 0; i < SHAPES.length; i++) { r -= weights[i]; if (r <= 0) return SHAPES[i]; }
+      return SHAPES[0];
+    }
+    function newTray() {
+      for (let tries = 0; tries < 30; tries++) {
+        tray = [0, 1, 2].map(() => ({ shape: dealPiece(), color: W.pick(COLORS), used: false }));
+        if (!board || tray.some(t => canPlaceAnywhere(t.shape))) return;
+      }
+    }
+    function reset() { board = Array.from({ length: N }, () => new Array(N).fill(null)); score = 0; combo = 0; newTray(); updateHud(); }
+    function updateHud() { hud.innerHTML = `${score}<small>${combo > 1 ? '🔥 combo ×' + combo : 'best ' + Math.max(best, score)}</small>`; }
+
+    const fits = (shape, gx, gy) => shape.every(([x, y]) => gx + x >= 0 && gy + y >= 0 && gx + x < N && gy + y < N && !board[gy + y][gx + x]);
+    const canPlaceAnywhere = shape => { for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (fits(shape, x, y)) return true; return false; };
+
+    function place(i, gx, gy) {
+      const p = tray[i];
+      if (!p || p.used || !fits(p.shape, gx, gy)) return false;
+      for (const [x, y] of p.shape) board[gy + y][gx + x] = p.color;
+      p.used = true;
+      score += p.shape.length;
+      W.sfx(520, { type: 'triangle', dur: 0.05, vol: 0.06 });
+      // Clear full rows and columns together.
+      const rows = [], cols = [];
+      for (let k = 0; k < N; k++) { if (board[k].every(Boolean)) rows.push(k); if (board.every(r => r[k])) cols.push(k); }
+      const lines = rows.length + cols.length;
+      if (lines) {
+        combo++;
+        const { cs, bx, by } = geo();
+        const cells = new Set();
+        rows.forEach(r => { for (let x = 0; x < N; x++) cells.add(r * N + x); });
+        cols.forEach(c => { for (let y = 0; y < N; y++) cells.add(y * N + c); });
+        for (const k of cells) {
+          const x = k % N, y = Math.floor(k / N);
+          for (let q = 0; q < 3; q++) parts.push({ x: bx + (x + 0.5) * cs, y: by + (y + 0.5) * cs, vx: W.rand(-90, 90), vy: W.rand(-120, 20), t: 0.5, c: board[y][x] });
+          board[y][x] = null;
+        }
+        score += lines * 10 * lines * combo;   // multi-line clears and combos stack up
+        flashes.push({ rows, cols, t: 0.25 });
+        pop = lines > 1 ? 0.6 : 0.35;
+        for (let q = 0; q < lines; q++) setTimeout(() => W.sfx(660 + q * 180 + combo * 40, { type: 'sine', dur: 0.15, vol: 0.1 }), q * 70);
+      } else combo = 0;
+      if (tray.every(t => t.used)) newTray();
+      updateHud();
+      if (!tray.some(t => !t.used && canPlaceAnywhere(t.shape))) {
+        state = 'over';
+        best = W.best('blockblast', score);
+        W.sfx(220, { type: 'sawtooth', dur: 0.4, vol: 0.08, slide: 80 });
+        setTimeout(() => W.overlay({ title: 'No room left!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 600);
+      }
+      return true;
+    }
+
+    // Where a tray piece is drawn (centred in its third of the tray).
+    function traySlot(i) { const { trayY, trayH } = geo(); return { x: view.w * (i + 0.5) / 3, y: trayY + trayH / 2, cell: Math.min(9, trayH / 5.5) }; }
+    const size = shape => [Math.max(...shape.map(c => c[0])) + 1, Math.max(...shape.map(c => c[1])) + 1];
+
+    // Grid position the dragged piece would snap to (piece floats above the finger so it isn't hidden).
+    function snap(i, px, py) {
+      const { cs, bx, by } = geo(), [sw, sh] = size(tray[i].shape);
+      const left = px - (sw * cs) / 2, top = py - 46 - (sh * cs) / 2;
+      return { gx: Math.round((left - bx) / cs), gy: Math.round((top - by) / cs), left, top };
+    }
+
+    function drawBlock(x, y, s, color, alpha = 1) {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color; ctx.fillRect(x + 0.5, y + 0.5, s - 1, s - 1);
+      ctx.fillStyle = '#ffffff40'; ctx.fillRect(x + 0.5, y + 0.5, s - 1, Math.max(1.5, s * 0.18));
+      ctx.fillStyle = '#00000030'; ctx.fillRect(x + 0.5, y + s - 0.5 - Math.max(1.5, s * 0.15), s - 1, Math.max(1.5, s * 0.15));
+      ctx.globalAlpha = 1;
+    }
+
+    function render(dt) {
+      const { w, h } = view, { cs, bx, by } = geo();
+      ctx.fillStyle = '#14122a'; ctx.fillRect(0, 0, w, h);
+      pop = Math.max(0, pop - dt);
+      ctx.save();
+      if (pop > 0) ctx.translate(W.rand(-1, 1) * pop * 4, W.rand(-1, 1) * pop * 4);
+      ctx.fillStyle = '#211e40'; ctx.fillRect(bx - 2, by - 2, cs * N + 4, cs * N + 4);
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        if (board[y][x]) drawBlock(bx + x * cs, by + y * cs, cs, board[y][x]);
+        else { ctx.fillStyle = '#2a2650'; ctx.fillRect(bx + x * cs + 1, by + y * cs + 1, cs - 2, cs - 2); }
+      }
+      // Ghost preview where the dragged/selected piece would land; rows/cols it would complete glow.
+      if (drag && drag.moved) {
+        const { gx, gy, left, top } = snap(drag.i, drag.x, drag.y), p = tray[drag.i];
+        if (fits(p.shape, gx, gy)) for (const [x, y] of p.shape) drawBlock(bx + (gx + x) * cs, by + (gy + y) * cs, cs, p.color, 0.35);
+        for (const [x, y] of p.shape) drawBlock(left + x * cs, top + y * cs, cs, p.color, 0.95);
+      }
+      for (const f of flashes) {
+        f.t -= dt;
+        ctx.fillStyle = `rgba(255,255,255,${Math.max(0, f.t * 3)})`;
+        f.rows.forEach(r => ctx.fillRect(bx, by + r * cs, cs * N, cs));
+        f.cols.forEach(c => ctx.fillRect(bx + c * cs, by, cs, cs * N));
+      }
+      flashes = flashes.filter(f => f.t > 0);
+      for (const p of parts) { p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 400 * dt; ctx.globalAlpha = Math.max(0, p.t * 2); ctx.fillStyle = p.c; ctx.fillRect(p.x - 2, p.y - 2, 4, 4); }
+      ctx.globalAlpha = 1;
+      parts = parts.filter(p => p.t > 0);
+      ctx.restore();
+      // Tray.
+      tray.forEach((p, i) => {
+        if (p.used || (drag && drag.moved && drag.i === i)) return;
+        const s = traySlot(i), [sw, sh] = size(p.shape), fitsSomewhere = canPlaceAnywhere(p.shape);
+        if (sel === i) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.strokeRect(s.x - w / 6 + 4, s.y - geo().trayH / 2 + 2, w / 3 - 8, geo().trayH - 4); }
+        for (const [x, y] of p.shape) drawBlock(s.x - (sw * s.cell) / 2 + x * s.cell, s.y - (sh * s.cell) / 2 + y * s.cell, s.cell, p.color, fitsSomewhere ? 1 : 0.3);
+      });
+    }
+
+    // Input: drag a piece from the tray (it floats above your finger), or tap a piece then tap the board.
+    W.pointer(canvas, {
+      down(p) {
+        if (state !== 'play') return;
+        const { trayY } = geo();
+        if (p.y >= trayY) {
+          const i = W.clamp(Math.floor(p.x / (view.w / 3)), 0, 2);
+          if (!tray[i].used) drag = { i, x: p.x, y: p.y, sx: p.x, sy: p.y, moved: false };
+        } else if (sel !== null) {
+          const { cs, bx, by } = geo(), [sw, sh] = size(tray[sel].shape);
+          const gx = Math.floor((p.x - bx) / cs) - Math.floor((sw - 1) / 2), gy = Math.floor((p.y - by) / cs) - Math.floor((sh - 1) / 2);
+          if (place(sel, gx, gy)) sel = null;
+        }
+      },
+      move(p) { if (drag) { drag.x = p.x; drag.y = p.y; if (Math.hypot(p.x - drag.sx, p.y - drag.sy) > 6) drag.moved = true; } },
+      up(p) {
+        if (!drag) return;
+        if (drag.moved) { const { gx, gy } = snap(drag.i, drag.x, drag.y); place(drag.i, gx, gy); sel = null; }
+        else sel = sel === drag.i ? null : drag.i;
+        drag = null;
+      },
+    });
+
+    function start() { reset(); sel = null; state = 'play'; }
+    reset();
+    W.overlay({ title: '🟪 Block Blast', text: 'Drag pieces onto the board<br>(or tap one, then tap a spot).<br>Fill rows & columns to clear!', onStart: start });
+    W.loop(render);
+  </script>
+</body>
+</html>
