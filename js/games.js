@@ -129,12 +129,13 @@ window.GAMES = [
   { id: 'hillracer', name: 'Hill Racer', emoji: '🚙', color: '#ff453a', desc: 'Physics hill climb — Crown is the gas pedal' },
   { id: 'pool', name: 'Pool', emoji: '🎱', color: '#1f8f4a', desc: 'Pot balls vs the watch' },
   { id: 'tanks', name: 'Tank Battle', emoji: '🪖', color: '#9a6b3c', desc: 'Bouncing-bullet tank duels' },
+  { id: 'bomber', name: 'Bomber', emoji: '💣', color: '#b5652b', desc: 'Bomberman vs 3 bots' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
 window.CATEGORIES = {
   Arcade: ['snakeio', 'blobio', 'flappy', 'stack', 'dino', 'knife', 'colorswitch', 'invaders', 'fruit', 'dodge', 'cave', 'hop',
-    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase', 'cycles', 'tugofwar', 'rhythm', 'dash', 'helix', 'snakeblocks', 'pinball', 'twistit', 'burger', 'jetpack', 'bricksballs', 'bulletdodge', 'walljump', 'holeio', 'paperio', 'survivor', 'railrunner', 'hillracer', 'tanks'],
+    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase', 'cycles', 'tugofwar', 'rhythm', 'dash', 'helix', 'snakeblocks', 'pinball', 'twistit', 'burger', 'jetpack', 'bricksballs', 'bulletdodge', 'walljump', 'holeio', 'paperio', 'survivor', 'railrunner', 'hillracer', 'tanks', 'bomber'],
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes', 'gems', 'ballsort', 'pegs', 'dropmerge', 'tiletrio', 'iceslide', 'fruitmerge', 'blockblast'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds', 'capitals', 'timestables', 'oddone', 'digitspan', 'wordsearch', 'memorygrid', 'flags'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers', 'dicepoker', 'gomoku'],

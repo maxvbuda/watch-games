@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Bomber</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const C = 11, R = 13;   // grid columns × rows
+    const D = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+    // Cells: 0 floor, 1 solid pillar, 2 brick. Power-ups sit on floor cells.
+    let spiral = [], hurryT = 0, grid, powers, bombs, flames, players, me, state = 'ready', wins = 0, losses = 0, t = 0, shake = 0, parts = [];
+    const COLORS = ['#ffffff', '#ff453a', '#0a84ff', '#ffd60a'];
+
+    function reset() {
+      grid = Array.from({ length: R }, (_, y) => Array.from({ length: C }, (_, x) => (x === 0 || y === 0 || x === C - 1 || y === R - 1 || (x % 2 === 0 && y % 2 === 0) ? 1 : 0)));
+      const starts = [[1, 1], [C - 2, R - 2], [C - 2, 1], [1, R - 2]];
+      // Bricks everywhere except the corners' breathing room.
+      for (let y = 1; y < R - 1; y++) for (let x = 1; x < C - 1; x++) if (!grid[y][x] && !starts.some(([sx, sy]) => Math.abs(sx - x) + Math.abs(sy - y) <= 1) && W.rng() < 0.62) grid[y][x] = 2;
+      powers = []; bombs = []; flames = []; parts = []; t = 0; hurryT = 0;
+      // "Hurry up!" order: a spiral of cells from the outer ring inward.
+      spiral = [];
+      let x0 = 1, y0 = 1, x1 = C - 2, y1 = R - 2;
+      while (x0 <= x1 && y0 <= y1) {
+        for (let x = x0; x <= x1; x++) spiral.push([x, y0]);
+        for (let y = y0 + 1; y <= y1; y++) spiral.push([x1, y]);
+        if (y1 > y0) for (let x = x1 - 1; x >= x0; x--) spiral.push([x, y1]);
+        if (x1 > x0) for (let y = y1 - 1; y > y0; y--) spiral.push([x0, y]);
+        x0++; y0++; x1--; y1--;
+      }
+      players = starts.map(([x, y], i) => ({ id: i, x, y, fx: x, fy: y, alive: true, ai: i > 0, max: 1, range: 1, speed: 4.2, moveT: 0, want: null, color: COLORS[i], face: i === 0 ? '🙂' : ['😈', '🤖', '👽'][i - 1], thinkT: 0, path: [] }));
+      me = players[0];
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `${wins}–${losses}<small>💣${me.max} 🔥${me.range}</small>`; }
+
+    const walkable = (x, y, p) => grid[y] && grid[y][x] === 0 && !bombs.some(b => b.x === x && b.y === y && !(p && b.x === p.x && b.y === p.y));
+    function dropBomb(p) {
+      if (!p.alive || bombs.filter(b => b.owner === p).length >= p.max || bombs.some(b => b.x === p.x && b.y === p.y)) return;
+      bombs.push({ x: p.x, y: p.y, t: 2.2, range: p.range, owner: p });
+      if (p === me) W.sfx(300, { type: 'triangle', dur: 0.06, vol: 0.06 });
+    }
+    const onFire = (x, y) => flames.some(f => f.x === x && f.y === y);
+    function blastCells(b) {
+      const cells = [[b.x, b.y]];
+      for (const [dx, dy] of Object.values(D)) for (let k = 1; k <= b.range; k++) {
+        const x = b.x + dx * k, y = b.y + dy * k;
+        if (grid[y][x] === 1) break;
+        cells.push([x, y]);
+        if (grid[y][x] === 2) break;
+      }
+      return cells;
+    }
+    function explode(b) {
+      bombs = bombs.filter(o => o !== b);
+      shake = 0.2;
+      W.sfx(90, { type: 'sawtooth', dur: 0.3, vol: 0.12, slide: 40 });
+      for (const [x, y] of blastCells(b)) {
+        flames.push({ x, y, t: 0.5 });
+        if (grid[y][x] === 2) {
+          grid[y][x] = 0;
+          for (let k = 0; k < 4; k++) parts.push({ x: x + 0.5, y: y + 0.5, vx: W.rand(-3, 3), vy: W.rand(-3, 3), t: 0.4 });
+          if (W.rng() < 0.32) powers.push({ x, y, k: W.pick(['bomb', 'fire', 'fire', 'speed']) });
+        } else powers = powers.filter(pw => !(pw.x === x && pw.y === y));
+        const chain = bombs.find(o => o.x === x && o.y === y);
+        if (chain) chain.t = Math.min(chain.t, 0.05);   // chain reaction
+      }
+    }
+    // Cells that will be on fire soon (any bomb's blast), for AI dodging.
+    function danger() {
+      const set = new Set();
+      for (const b of bombs) for (const [x, y] of blastCells(b)) set.add(x + ',' + y);
+      for (const f of flames) set.add(f.x + ',' + f.y);
+      return set;
+    }
+    function bfs(p, goal, avoid) {
+      const start = p.x + ',' + p.y, prev = new Map([[start, null]]), q = [[p.x, p.y]];
+      while (q.length) {
+        const [x, y] = q.shift();
+        if (goal(x, y)) { const path = []; let k = x + ',' + y; while (prev.get(k)) { path.unshift(k.split(',').map(Number)); k = prev.get(k); } return path; }
+        for (const [dx, dy] of Object.values(D)) {
+          const nx = x + dx, ny = y + dy, k = nx + ',' + ny;
+          if (prev.has(k) || !walkable(nx, ny) || onFire(nx, ny) || (avoid && avoid.has(k) && !goal(nx, ny))) continue;
+          prev.set(k, x + ',' + y); q.push([nx, ny]);
+        }
+      }
+      return null;
+    }
+    function think(p) {
+      const dz = danger(), here = p.x + ',' + p.y;
+      if (dz.has(here)) { p.path = bfs(p, (x, y) => !dz.has(x + ',' + y)) || []; return; }
+      // Bomb a brick or a nearby player if we can still escape afterwards.
+      const nearBrick = Object.values(D).some(([dx, dy]) => grid[p.y + dy][p.x + dx] === 2);
+      const nearFoe = players.some(o => o !== p && o.alive && Math.abs(o.x - p.x) + Math.abs(o.y - p.y) <= p.range && (o.x === p.x || o.y === p.y));
+      if ((nearBrick || nearFoe) && W.rng() < 0.8) {
+        const test = { x: p.x, y: p.y, range: p.range };
+        const after = new Set([...dz, ...blastCells(test).map(c => c.join(','))]);
+        bombs.push({ x: p.x, y: p.y, t: 99, range: p.range, owner: p, fake: true });
+        const escape = bfs(p, (x, y) => !after.has(x + ',' + y), null);
+        bombs = bombs.filter(b => !b.fake);
+        if (escape && escape.length <= 6) { dropBomb(p); p.path = escape; return; }
+      }
+      // Otherwise head for a power-up, a brick, or a rival — avoiding danger.
+      const goal = powers.length ? (x, y) => powers.some(pw => pw.x === x && pw.y === y)
+        : (x, y) => Object.values(D).some(([dx, dy]) => grid[y + dy] && grid[y + dy][x + dx] === 2) || players.some(o => o !== p && o.alive && Math.abs(o.x - x) + Math.abs(o.y - y) <= 1);
+      const path = bfs(p, goal, dz);
+      p.path = path && path.length ? path.slice(0, 3) : [];
+      // Nothing useful to do from here: wander to a safe neighbouring cell instead of freezing.
+      if (!p.path.length) { const opts = Object.values(D).map(([dx, dy]) => [p.x + dx, p.y + dy]).filter(([x, y]) => walkable(x, y) && !dz.has(x + ',' + y)); if (opts.length) p.path = [W.pick(opts)]; }
+    }
+
+    function step(p, dt) {
+      p.moveT -= dt;
+      if (p.moveT > 0) return;
+      let nx = null;
+      if (p.ai) { if (!p.path.length) { p.thinkT -= dt; if (p.thinkT <= 0) { think(p); p.thinkT = 0.15; } } if (p.path.length) nx = p.path.shift(); }
+      else if (p.want) nx = [p.x + D[p.want][0], p.y + D[p.want][1]];
+      if (!nx || !walkable(nx[0], nx[1], p) || onFire(nx[0], nx[1])) { if (p.ai) p.path = []; return; }   // never step into live flames
+      if (p.ai && danger().has(nx.join(',')) && !danger().has(p.x + ',' + p.y)) { p.path = []; return; }   // don't walk into fire
+      p.x = nx[0]; p.y = nx[1]; p.moveT = 1 / p.speed;
+      const pw = powers.find(o => o.x === p.x && o.y === p.y);
+      if (pw) { powers = powers.filter(o => o !== pw); if (pw.k === 'bomb') p.max++; if (pw.k === 'fire') p.range++; if (pw.k === 'speed') p.speed = Math.min(7, p.speed + 0.8); if (p === me) { W.sfx(880, { type: 'sine', dur: 0.15, vol: 0.08, slide: 1760 }); updateHud(); } }
+    }
+
+    function update(dt) {
+      t += dt;
+      // After 75 s the arena closes in, so every round ends.
+      if (t > 75) {
+        hurryT -= dt;
+        if (hurryT <= 0 && spiral.length) {
+          hurryT = 0.18;
+          let cell; do cell = spiral.shift(); while (cell && grid[cell[1]][cell[0]] === 1 && spiral.length);
+          if (cell) {
+            const [x, y] = cell; grid[y][x] = 1; bombs = bombs.filter(b => !(b.x === x && b.y === y)); powers = powers.filter(p => !(p.x === x && p.y === y));
+            for (const p of players) if (p.alive && p.x === x && p.y === y) p.alive = false;
+            W.sfx(70, { type: 'square', dur: 0.05, vol: 0.05 });
+          }
+        }
+      }
+      for (const b of [...bombs]) { b.t -= dt; if (b.t <= 0 && bombs.includes(b)) explode(b); }
+      for (const f of flames) f.t -= dt;
+      flames = flames.filter(f => f.t > 0);
+      for (const p of players) {
+        if (!p.alive) continue;
+        step(p, dt);
+        p.fx += (p.x - p.fx) * Math.min(1, dt * 16); p.fy += (p.y - p.fy) * Math.min(1, dt * 16);
+        if (flames.some(f => f.x === p.x && f.y === p.y)) { p.alive = false; for (let k = 0; k < 12; k++) parts.push({ x: p.x + 0.5, y: p.y + 0.5, vx: W.rand(-4, 4), vy: W.rand(-4, 4), t: 0.6, c: p.color }); }
+      }
+      const alive = players.filter(p => p.alive);
+      if (!me.alive || alive.length <= 1) {
+        state = 'over';
+        const won = me.alive;
+        if (won) { wins++; W.best('bomber', wins); } else losses++;
+        updateHud();
+        setTimeout(() => W.overlay({ title: won ? '🏆 Last bomber standing!' : 'Blown up! 💥', text: `You ${wins} – ${losses} Bots`, button: 'Next round', onStart: start }), 800);
+      }
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const cs = Math.min((w - 4) / C, (h - 30) / R), ox = (w - cs * C) / 2, oy = h - cs * R - 2;
+      shake = Math.max(0, shake - dt);
+      ctx.save();
+      if (shake > 0) ctx.translate(W.rand(-2, 2) * shake * 5, W.rand(-2, 2) * shake * 5);
+      ctx.fillStyle = '#0d0d10'; ctx.fillRect(-5, -5, w + 10, h + 10);
+      for (let y = 0; y < R; y++) for (let x = 0; x < C; x++) {
+        const X = ox + x * cs, Y = oy + y * cs, g = grid[y][x];
+        if (g === 1) { ctx.fillStyle = '#5a5a66'; ctx.fillRect(X, Y, cs, cs); ctx.fillStyle = '#7a7a88'; ctx.fillRect(X, Y, cs, cs * 0.25); }
+        else if (g === 2) { ctx.fillStyle = '#b5652b'; ctx.fillRect(X, Y, cs, cs); ctx.strokeStyle = '#7a3f15'; ctx.lineWidth = 1; ctx.strokeRect(X + 0.5, Y + 0.5, cs - 1, cs / 2); ctx.strokeRect(X + cs / 2, Y + cs / 2, cs / 2 - 0.5, cs / 2 - 0.5); ctx.strokeRect(X + 0.5, Y + cs / 2, cs / 2, cs / 2 - 0.5); }
+        else { ctx.fillStyle = (x + y) % 2 ? '#3d8c40' : '#43994a'; ctx.fillRect(X, Y, cs, cs); }
+      }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000';
+      for (const pw of powers) { ctx.font = `${Math.round(cs * 0.75)}px sans-serif`; ctx.fillText(pw.k === 'bomb' ? '💣' : pw.k === 'fire' ? '🔥' : '👟', ox + (pw.x + 0.5) * cs, oy + (pw.y + 0.55) * cs); }
+      for (const b of bombs) { const pulse = 1 + Math.sin(b.t * 14) * 0.08; ctx.font = `${Math.round(cs * 0.85 * pulse)}px sans-serif`; ctx.fillText('💣', ox + (b.x + 0.5) * cs, oy + (b.y + 0.55) * cs); }
+      for (const f of flames) { const a = Math.min(1, f.t * 3); ctx.fillStyle = `rgba(255,${120 + f.t * 200},0,${a})`; ctx.fillRect(ox + f.x * cs + 1, oy + f.y * cs + 1, cs - 2, cs - 2); ctx.fillStyle = `rgba(255,240,180,${a})`; ctx.fillRect(ox + f.x * cs + cs * 0.3, oy + f.y * cs + cs * 0.3, cs * 0.4, cs * 0.4); }
+      for (const p of players) {
+        if (!p.alive) continue;
+        const X = ox + (p.fx + 0.5) * cs, Y = oy + (p.fy + 0.5) * cs;
+        ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(X, Y + cs * 0.05, cs * 0.46, 0, 7); ctx.fill();
+        ctx.font = `${Math.round(cs * 0.75)}px sans-serif`; ctx.fillStyle = '#000'; ctx.fillText(p.face, X, Y + cs * 0.08);
+      }
+      for (const q of parts) { q.t -= dt; q.x += q.vx * dt; q.y += q.vy * dt; ctx.fillStyle = q.c || '#b5652b'; ctx.globalAlpha = Math.max(0, q.t * 2); ctx.fillRect(ox + q.x * cs - 2, oy + q.y * cs - 2, 4, 4); }
+      ctx.globalAlpha = 1;
+      parts = parts.filter(q => q.t > 0);
+      if (t > 72 && state === 'play' && Math.floor(t * 3) % 2) { ctx.fillStyle = '#ff453a'; ctx.font = '900 16px -apple-system, system-ui'; ctx.textAlign = 'center'; ctx.fillText('HURRY UP!', w / 2, h / 2); }
+      ctx.restore();
+    }
+
+    // Hold a direction (drag) to walk; tap to drop a bomb. Swiping also sets direction.
+    let joy = null;
+    W.pointer(canvas, {
+      down: p => { joy = { sx: p.x, sy: p.y, moved: false }; },
+      move: p => {
+        if (!joy) return;
+        const dx = p.x - joy.sx, dy = p.y - joy.sy;
+        if (Math.hypot(dx, dy) > 10) { joy.moved = true; me.want = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'); }
+      },
+      up: () => { if (joy && !joy.moved && state === 'play') dropBomb(me); me.want = null; joy = null; },
+    });
+    window.addEventListener('keydown', e => { const k = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' }[e.key]; if (k) me.want = k; if (e.key === ' ') dropBomb(me); });
+    window.addEventListener('keyup', e => { if (e.key.startsWith('Arrow')) me.want = null; });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '💣 Bomber', text: 'Drag to walk, tap to drop a<br>bomb. Blast bricks for power-<br>ups. Last one standing wins!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
