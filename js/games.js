@@ -118,12 +118,13 @@ window.GAMES = [
   { id: 'dragrace', name: 'Drag Race', emoji: '🏁', color: '#30d158', desc: 'Launch on green, shift perfectly' },
   { id: 'archery', name: 'Archery', emoji: '🏹', color: '#5aa04a', desc: 'Crown aims, hold to draw' },
   { id: 'pancake', name: 'Pancake Flip', emoji: '🥞', color: '#f2c66d', desc: 'Flip and serve perfect pancakes' },
+  { id: 'walljump', name: 'Wall Jump', emoji: '🥷', color: '#4a3f6b', desc: 'Leap between walls, dodge spikes' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
 window.CATEGORIES = {
   Arcade: ['snakeio', 'blobio', 'flappy', 'stack', 'dino', 'knife', 'colorswitch', 'invaders', 'fruit', 'dodge', 'cave', 'hop',
-    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase', 'cycles', 'tugofwar', 'rhythm', 'dash', 'helix', 'snakeblocks', 'pinball', 'twistit', 'burger', 'jetpack', 'bricksballs', 'bulletdodge'],
+    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase', 'cycles', 'tugofwar', 'rhythm', 'dash', 'helix', 'snakeblocks', 'pinball', 'twistit', 'burger', 'jetpack', 'bricksballs', 'bulletdodge', 'walljump'],
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes', 'gems', 'ballsort', 'pegs', 'dropmerge', 'tiletrio'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds', 'capitals', 'timestables', 'oddone', 'digitspan', 'wordsearch', 'memorygrid', 'flags'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers', 'dicepoker', 'gomoku'],
