@@ -126,6 +126,24 @@
     if (o) o.classList.add('hidden');
   };
 
+  // Tiny synth for game feel: W.sfx(freq, { type, dur, vol, slide }) — slide bends the pitch to a target freq.
+  let audioCtx = null;
+  W.sfx = function (freq, { type = 'square', dur = 0.08, vol = 0.08, slide = 0 } = {}) {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime;
+      o.type = type;
+      o.frequency.setValueAtTime(freq, t);
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, slide), t + dur);
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(audioCtx.destination);
+      o.start(t); o.stop(t + dur);
+    } catch (e) {}
+  };
+  // Short buzz on supporting devices (Apple Watch Safari ignores it, phones may not).
+  W.buzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
+
   // Digital Crown input. The crown scrolls the page, so we make the page secretly
   // scrollable and report each scroll delta (px; positive = crown turned down).
   W.crown = function (cb) {

@@ -182,3 +182,5 @@ body.game.crown::-webkit-scrollbar { display: none; }
 body.crown canvas.full, body.crown .hud, body.crown .back, body.crown .overlay,
 body.crown #area, body.crown .fixed { position: fixed; }
 #crown-spacer { height: 200000px; width: 1px; pointer-events: none; }
+
+.btn.random { display: block; text-align: center; text-decoration: none; margin: 2px auto 8px; padding: 9px 0; width: 100%; max-width: 260px; background: linear-gradient(135deg, #bf5af2, #0a84ff); color: #fff; }
