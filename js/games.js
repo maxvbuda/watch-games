@@ -100,6 +100,7 @@ window.GAMES = [
   { id: 'digitspan', name: 'Digit Span', emoji: '🧮', color: '#64d2ff', desc: 'How many digits can you hold?' },
   { id: 'pinball', name: 'Pinball', emoji: '🪩', color: '#bf5af2', desc: 'Flip, bump, score' },
   { id: 'skeeball', name: 'Skee-Ball', emoji: '🎟️', color: '#a0703c', desc: 'Roll for the 100 holes' },
+  { id: 'slalom', name: 'Ski Slalom', emoji: '⛷️', color: '#0a84ff', desc: 'Crown carves through the gates' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
@@ -109,7 +110,7 @@ window.CATEGORIES = {
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes', 'gems', 'ballsort'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds', 'capitals', 'timestables', 'oddone', 'digitspan'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers', 'dicepoker'],
-  Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty', 'homerun', 'papertoss', 'skeeball'],
+  Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty', 'homerun', 'papertoss', 'skeeball', 'slalom'],
   Fun: ['eightball', 'slots', 'cookie', 'plinko', 'pet', 'fishing', 'bubblewrap'],
 };
-window.CROWN = ['snakeblocks', 'helix', 'tugofwar', 'fishing', 'buggy', 'safe', 'artillery', 'lander', 'pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];
+window.CROWN = ['slalom', 'snakeblocks', 'helix', 'tugofwar', 'fishing', 'buggy', 'safe', 'artillery', 'lander', 'pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];

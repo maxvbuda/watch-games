@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Ski Slalom</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>.back { background: rgba(0, 0, 0, 0.35); } .hud { color: #000; text-shadow: 0 0 3px #fff; }</style>
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // Ski downhill through gate pairs (pass between the flags). Trees end your run; missed gates cost time.
+    let x, angle, gates, trees, dist, speed, missed, passed, state = 'ready', tracks = [], t = 0;
+    const SY = () => view.h * 0.28;
+
+    function reset() { x = view.w / 2; angle = 0; gates = []; trees = []; dist = 0; speed = view.h * 0.5; missed = 0; passed = 0; tracks = []; addStuff(view.h * 0.6); updateHud(); }
+    function addStuff(from) {
+      let y = from;
+      for (let k = 0; k < 6; k++) {
+        y += view.h * W.rand(0.32, 0.45);
+        const gap = Math.max(view.w * 0.26, view.w * 0.42 - passed * 2), cx = W.rand(gap / 2 + 8, view.w - gap / 2 - 8);
+        gates.push({ y, cx, gap, color: k % 2 ? '#ff453a' : '#0a84ff' });
+        if (W.rng() < 0.7) trees.push({ y: y + view.h * 0.16, x: W.rng() < 0.5 ? W.rand(6, cx - gap / 2 - 10) : W.rand(cx + gap / 2 + 10, view.w - 6) });
+      }
+    }
+    function updateHud() { hud.innerHTML = `${passed}<small>gates · ${missed} missed</small>`; }
+
+    function update(dt) {
+      t += dt;
+      speed = Math.min(view.h * 1.4, speed + view.h * 0.025 * dt);
+      const fwd = Math.cos(angle) * speed;
+      x = W.clamp(x + Math.sin(angle) * speed * dt, 6, view.w - 6);
+      dist += fwd * dt;
+      tracks.push({ x, y: dist }); if (tracks.length > 80) tracks.shift();
+      for (const g of gates) if (!g.done && dist >= g.y) {
+        g.done = true;
+        if (Math.abs(x - g.cx) < g.gap / 2) passed++; else { missed++; speed *= 0.7; }
+        updateHud();
+        if (missed >= 3) return end('3 gates missed');
+      }
+      for (const tr of trees) if (Math.abs(dist - tr.y) < 6 && Math.abs(x - tr.x) < 9) return end('Hit a tree! 🌲');
+      gates = gates.filter(g => g.y > dist - view.h); trees = trees.filter(tr => tr.y > dist - view.h);
+      if (Math.max(...gates.map(g => g.y), 0) < dist + view.h * 1.5) addStuff(Math.max(...gates.map(g => g.y), dist));
+    }
+    function end(why) {
+      state = 'over';
+      const best = W.best('slalom', passed);
+      setTimeout(() => W.overlay({ title: why, big: passed + ' gates', text: `Best ${best}`, button: 'Again', onStart: start }), 500);
+    }
+
+    const sy = y => y - dist + SY();
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#f4f8ff'; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#dfe9f7';
+      for (let k = 0; k < 14; k++) { const y = ((k * 53 - dist * 0.9) % (h + 40) + h + 40) % (h + 40) - 20; ctx.fillRect((k * 71) % w, y, 18, 2); }
+      ctx.strokeStyle = '#c9d6ea'; ctx.lineWidth = 2;
+      ctx.beginPath(); tracks.forEach((p, i) => ctx[i ? 'lineTo' : 'moveTo'](p.x, sy(p.y))); ctx.stroke();
+      for (const g of gates) {
+        const y = sy(g.y);
+        for (const fx of [g.cx - g.gap / 2, g.cx + g.gap / 2]) {
+          ctx.fillStyle = '#555'; ctx.fillRect(fx - 1, y - 12, 2, 14);
+          ctx.fillStyle = g.done ? '#c7c7cc' : g.color; ctx.beginPath(); ctx.moveTo(fx, y - 12); ctx.lineTo(fx + (fx < g.cx ? -9 : 9), y - 8); ctx.lineTo(fx, y - 4); ctx.fill();
+        }
+      }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.font = '20px sans-serif';
+      for (const tr of trees) ctx.fillText('🌲', tr.x, sy(tr.y) - 8);
+      ctx.save(); ctx.translate(x, SY()); ctx.rotate(-angle);
+      ctx.fillStyle = '#ff9f0a'; ctx.fillRect(-5, -9, 2, 16); ctx.fillRect(3, -9, 2, 16);   // skis
+      ctx.restore();
+      ctx.font = '16px sans-serif'; ctx.fillText(state === 'over' ? '😵' : '⛷️', x, SY() - 6);
+    }
+
+    const steer = a => (angle = W.clamp(a, -1.15, 1.15));
+    W.crown(d => { if (state === 'play') steer(angle + d * 0.008); });
+    W.pointer(canvas, { down: p => steer((p.x - view.w / 2) / (view.w / 2) * 1.15), move: p => steer((p.x - view.w / 2) / (view.w / 2) * 1.15) });
+    window.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') steer(angle - 0.15); if (e.key === 'ArrowRight') steer(angle + 0.15); });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '⛷️ Ski Slalom', text: 'Turn the Crown (or touch a<br>side) to carve. Ski between<br>the flags, miss the trees!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(); });
+  </script>
+</body>
+</html>
