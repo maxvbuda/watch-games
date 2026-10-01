@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Drag Race</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // Quarter-mile drag race. Tap on green to launch, then tap to shift when the rev needle hits the green zone.
+    const GEARS = 5, LEN = 400;
+    let me, cpu, lights, t, state = 'ready', msg = '', msgT = 0, rivalLevel = 1;
+    function reset() {
+      me = { x: 0, v: 0, gear: 1, rpm: 0, started: false, jump: false };
+      cpu = { x: 0, v: 0, gear: 1, rpm: 0 };
+      lights = 3.2; t = 0;
+      hud.innerHTML = `Race ${rivalLevel}<small>tap to shift</small>`;
+    }
+    const topSpeed = g => 18 + g * 11;   // top speed per gear (m/s)
+    function physics(c, dt, auto) {
+      if (!c.started && c !== cpu) return;
+      // Revs climb faster in low gears; past the redline you stop accelerating.
+      c.rpm = Math.min(1.08, c.rpm + dt * (0.9 - c.gear * 0.1));
+      const accel = c.rpm > 1 ? -2 : (12 - c.gear * 1.4) * (0.6 + c.rpm * 0.5);
+      c.v = Math.max(0, Math.min(topSpeed(c.gear), c.v + accel * dt));
+      c.x += c.v * dt;
+      if (auto && c.rpm > 0.86 + W.rand(-0.06, 0.06) && c.gear < GEARS) shift(c);
+    }
+    function shift(c) {
+      if (c.gear >= GEARS) return;
+      const r = c.rpm, perfect = r > 0.82 && r < 0.95, good = r > 0.7 && r <= 1.0;
+      c.gear++; c.rpm = Math.max(0.3, r - 0.55);
+      if (c === me) { msg = perfect ? 'PERFECT SHIFT! 🔥' : good ? 'Good shift' : r > 1 ? 'Too late!' : 'Too early'; msgT = 0.7; if (perfect) c.v += 3; if (!good) c.v *= 0.9; }
+    }
+    function tap() {
+      if (state !== 'play') return;
+      if (!me.started) {
+        if (lights > 0) { me.jump = true; msg = 'JUMP START! ❌'; msgT = 1.5; return finish(false); }
+        me.started = true; me.rpm = 0.4; const react = -lights; msg = `Reaction ${react.toFixed(2)}s`; msgT = 0.8; me.v = Math.max(0, 4 - react * 8);
+        return;
+      }
+      shift(me);
+    }
+    function update(dt) {
+      t += dt;
+      lights -= dt;
+      if (lights <= 0) { const skill = Math.min(0.97, 0.8 + rivalLevel * 0.03); physics(cpu, dt * skill + dt * (1 - skill) * 0.7, true); }
+      physics(me, dt);
+      if (me.x >= LEN || cpu.x >= LEN) finish(me.x >= cpu.x);
+    }
+    function finish(won) {
+      state = 'over';
+      if (won) { W.best('dragrace', rivalLevel); rivalLevel++; }
+      setTimeout(() => W.overlay({ title: won ? 'You win! 🏁' : me.jump ? 'Jump start!' : 'Rival wins', big: won ? t.toFixed(2) + 's' : undefined, text: won ? `Next: race ${rivalLevel}` : `Race ${rivalLevel}`, button: won ? 'Next race' : 'Retry', onStart: start }), 700);
+    }
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#1c1c1e'; ctx.fillRect(0, 0, w, h);
+      // Two lanes viewed from above, camera follows you.
+      const cam = me.x * 6 - w * 0.3, laneH = h * 0.18, y1 = h * 0.3, y2 = y1 + laneH + 4;
+      ctx.fillStyle = '#3a3a3c'; ctx.fillRect(0, y1, w, laneH); ctx.fillRect(0, y2, w, laneH);
+      ctx.fillStyle = '#fff';
+      for (let m = Math.floor(cam / 60) * 60; m < cam + w; m += 60) ctx.fillRect(m - cam, y1 + laneH + 1, 20, 2);
+      const fx = LEN * 6 - cam; ctx.fillStyle = '#fff'; for (let k = 0; k < 8; k++) ctx.fillRect(fx, y1 + k * (laneH * 2 + 4) / 8, 4, (laneH * 2 + 4) / 16);
+      ctx.font = `${Math.round(laneH * 0.8)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000';
+      for (const [c, y, e] of [[cpu, y1, '🚓'], [me, y2, '🏎️']]) { ctx.save(); ctx.translate(c.x * 6 - cam + 20, y + laneH / 2); ctx.scale(-1, 1); ctx.fillText(e, 0, 0); ctx.restore(); }
+      // Christmas tree lights.
+      if (lights > -0.5) for (let k = 0; k < 3; k++) { ctx.fillStyle = lights > 0 ? (lights < 3 - k ? '#ffd60a' : '#3a3a3c') : '#30d158'; ctx.beginPath(); ctx.arc(w / 2 + (k - 1) * 16, h * 0.17, 6, 0, 7); ctx.fill(); }
+      // Tachometer.
+      const cx = w / 2, cy = h - 12, R = h * 0.2;
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = '#3a3a3c'; ctx.beginPath(); ctx.arc(cx, cy, R, Math.PI, 0); ctx.stroke();
+      ctx.strokeStyle = '#30d158'; ctx.beginPath(); ctx.arc(cx, cy, R, Math.PI + 0.82 * Math.PI, Math.PI + 0.95 * Math.PI); ctx.stroke();
+      ctx.strokeStyle = '#ff453a'; ctx.beginPath(); ctx.arc(cx, cy, R, Math.PI + 0.97 * Math.PI, Math.PI * 2); ctx.stroke();
+      const na = Math.PI + Math.min(me.rpm, 1.08) * Math.PI;
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(na) * R, cy + Math.sin(na) * R); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = '800 12px -apple-system, system-ui'; ctx.fillText(`G${me.gear}  ${Math.round(me.v * 3.6)} km/h`, cx, cy - R * 0.45);
+      if (msgT > 0) { msgT -= dt; ctx.globalAlpha = Math.min(1, msgT * 3); ctx.font = '800 13px -apple-system, system-ui'; ctx.fillStyle = msg.includes('PERFECT') ? '#ffd60a' : '#fff'; ctx.fillText(msg, w / 2, h * 0.7 - R); ctx.globalAlpha = 1; }
+      else if (state === 'play' && !me.started) { ctx.fillStyle = '#fff'; ctx.font = '600 11px -apple-system, system-ui'; ctx.fillText(lights > 0 ? 'Wait for green…' : 'GO! TAP!', w / 2, h * 0.7 - R); }
+    }
+    W.pointer(canvas, { down: tap });
+    window.addEventListener('keydown', e => { if (e.key === ' ') tap(); });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🏁 Drag Race', text: 'Tap on green to launch,<br>then tap to shift in the<br>green zone. Beat the cop!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>

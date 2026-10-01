@@ -115,6 +115,7 @@ window.GAMES = [
   { id: 'squash', name: 'Squash', emoji: '🎾', color: '#d9c3a0', desc: 'Solo rally — Crown moves the racket' },
   { id: 'tiletrio', name: 'Tile Trio', emoji: '🍓', color: '#8b5a2b', desc: 'Match 3 tiles, keep the tray clear' },
   { id: 'bulletdodge', name: 'Bullet Dodge', emoji: '💠', color: '#ff375f', desc: 'Survive the bullet patterns' },
+  { id: 'dragrace', name: 'Drag Race', emoji: '🏁', color: '#30d158', desc: 'Launch on green, shift perfectly' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
@@ -124,7 +125,7 @@ window.CATEGORIES = {
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes', 'gems', 'ballsort', 'pegs', 'dropmerge', 'tiletrio'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds', 'capitals', 'timestables', 'oddone', 'digitspan', 'wordsearch', 'memorygrid', 'flags'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers', 'dicepoker', 'gomoku'],
-  Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty', 'homerun', 'papertoss', 'skeeball', 'slalom', 'keepyuppy', 'squash'],
+  Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty', 'homerun', 'papertoss', 'skeeball', 'slalom', 'keepyuppy', 'squash', 'dragrace'],
   Fun: ['eightball', 'slots', 'cookie', 'plinko', 'pet', 'fishing', 'bubblewrap'],
 };
 window.CROWN = ['squash', 'bricksballs', 'burger', 'twistit', 'slalom', 'snakeblocks', 'helix', 'tugofwar', 'fishing', 'buggy', 'safe', 'artillery', 'lander', 'pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];
