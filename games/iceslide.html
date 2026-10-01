@@ -41,8 +41,10 @@
     }
     function newLevel() {
       N = Math.min(6 + Math.floor(level / 3), 10);
-      const minMoves = Math.min(3 + Math.floor(level / 2), 9);
-      for (let tries = 0; tries < 500; tries++) {
+      let minMoves = Math.min(3 + Math.floor(level / 2), 9);
+      // Keep generating until the solver finds a route at least minMoves long (relaxing it if needed).
+      for (let tries = 0; ; tries++) {
+        if (tries && tries % 400 === 0 && minMoves > 1) minMoves--;
         rocks = new Set();
         const count = Math.floor(N * N * 0.16);
         while (rocks.size < count) rocks.add(W.randInt(0, N - 1) + ',' + W.randInt(0, N - 1));
