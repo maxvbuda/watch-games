@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Word Search</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const N = 7;
+    const THEMES = {
+      Animals: ['CAT', 'DOG', 'LION', 'BEAR', 'WOLF', 'FROG', 'DUCK', 'GOAT', 'SEAL', 'MOLE', 'OWL', 'FOX', 'YAK', 'APE'],
+      Food: ['PIE', 'JAM', 'RICE', 'SOUP', 'CAKE', 'MILK', 'TACO', 'PEAR', 'PLUM', 'BEAN', 'KIWI', 'EGG', 'BUN', 'NUT'],
+      Space: ['SUN', 'MOON', 'STAR', 'MARS', 'ORBIT', 'COMET', 'NOVA', 'VENUS', 'SKY', 'RAY', 'DUST', 'GAS'],
+      Sports: ['GOLF', 'SWIM', 'SKI', 'RUN', 'JUDO', 'POLO', 'DART', 'SURF', 'BOX', 'GOAL', 'BAT', 'NET'],
+    };
+    const DIRS = [[1, 0], [0, 1], [1, 1], [-1, 1], [-1, 0], [0, -1]];
+    // Drag across a word to circle it. Find them all!
+    let grid, words, found, theme, drag = null, startT, segs;
+
+    function build() {
+      theme = W.pick(Object.keys(THEMES));
+      const pool = W.shuffle([...THEMES[theme]]);
+      grid = new Array(N * N).fill(''); words = []; segs = [];
+      for (const word of pool) {
+        if (words.length >= 5) break;
+        for (let tries = 0; tries < 60; tries++) {
+          const [dx, dy] = W.pick(DIRS), x = W.randInt(0, N - 1), y = W.randInt(0, N - 1);
+          const ex = x + dx * (word.length - 1), ey = y + dy * (word.length - 1);
+          if (ex < 0 || ey < 0 || ex >= N || ey >= N) continue;
+          if ([...word].some((ch, k) => { const g = grid[(y + dy * k) * N + x + dx * k]; return g && g !== ch; })) continue;
+          [...word].forEach((ch, k) => (grid[(y + dy * k) * N + x + dx * k] = ch));
+          words.push({ word, x, y, ex, ey });
+          break;
+        }
+      }
+      for (let i = 0; i < N * N; i++) if (!grid[i]) grid[i] = String.fromCharCode(65 + W.randInt(0, 25));
+      found = new Set(); startT = Date.now();
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `${found.size}/${words.length}<small>${theme}</small>`; }
+    function geo() { const s = Math.min((view.w - 6) / N, (view.h - 62) / N); return { s, ox: (view.w - s * N) / 2, oy: 30 }; }
+    const cellOf = p => { const { s, ox, oy } = geo(); const x = Math.floor((p.x - ox) / s), y = Math.floor((p.y - oy) / s); return x >= 0 && y >= 0 && x < N && y < N ? [x, y] : null; };
+
+    function release() {
+      if (!drag || !drag.end) return;
+      const [[x1, y1], [x2, y2]] = [drag.start, drag.end];
+      for (const w of words) {
+        if (found.has(w.word)) continue;
+        if ((w.x === x1 && w.y === y1 && w.ex === x2 && w.ey === y2) || (w.x === x2 && w.y === y2 && w.ex === x1 && w.ey === y1)) {
+          found.add(w.word); segs.push(w); updateHud();
+          if (found.size === words.length) {
+            const secs = Math.round((Date.now() - startT) / 1000);
+            const best = W.best('wordsearch', secs, true);
+            setTimeout(() => W.overlay({ title: 'All found! 🔤', big: secs + 's', text: `Best ${best}s`, button: 'New puzzle', onStart: build }), 400);
+          }
+        }
+      }
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#fdf6e3'; ctx.fillRect(0, 0, w, h);
+      const { s, ox, oy } = geo();
+      ctx.lineCap = 'round';
+      const hl = (a, b, c) => { ctx.strokeStyle = c; ctx.lineWidth = s * 0.75; ctx.beginPath(); ctx.moveTo(ox + (a[0] + 0.5) * s, oy + (a[1] + 0.5) * s); ctx.lineTo(ox + (b[0] + 0.5) * s, oy + (b[1] + 0.5) * s); ctx.stroke(); };
+      segs.forEach((g, i) => hl([g.x, g.y], [g.ex, g.ey], `hsla(${i * 70},80%,60%,0.45)`));
+      if (drag && drag.end) hl(drag.start, drag.end, '#0a84ff55');
+      ctx.fillStyle = '#1c1c1e'; ctx.font = `700 ${Math.round(s * 0.55)}px -apple-system, system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (let i = 0; i < N * N; i++) ctx.fillText(grid[i], ox + (i % N + 0.5) * s, oy + (Math.floor(i / N) + 0.55) * s);
+      ctx.font = '700 9px -apple-system, system-ui';
+      const list = words.map(w => w.word), y0 = oy + N * s + 10;
+      list.forEach((wd, i) => { ctx.fillStyle = found.has(wd) ? '#c7c7cc' : '#1c1c1e'; ctx.fillText(wd, w * (0.1 + (i % 5) * 0.2), y0 + Math.floor(i / 5) * 11); });
+    }
+
+    // Snap the drag to the nearest straight line (row, column or diagonal).
+    W.pointer(canvas, {
+      down: p => { const c = cellOf(p); drag = c ? { start: c, end: c } : null; },
+      move: p => {
+        if (!drag) return;
+        const c = cellOf(p); if (!c) return;
+        const dx = c[0] - drag.start[0], dy = c[1] - drag.start[1];
+        if (dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy)) drag.end = c;
+      },
+      up: () => { release(); drag = null; },
+    });
+    build();
+    W.overlay({ title: '🔤 Word Search', text: 'Drag across hidden words —<br>across, down or diagonal.<br>Find all 5!', onStart() {} });
+    W.loop(render);
+  </script>
+</body>
+</html>

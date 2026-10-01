@@ -104,6 +104,7 @@ window.GAMES = [
   { id: 'twistit', name: 'Twist It!', emoji: '⌚', color: '#ff9f0a', desc: 'Tap, swipe, hold or twist the Crown!' },
   { id: 'pegs', name: 'Peg Solitaire', emoji: '📍', color: '#c48a50', desc: 'Jump pegs, leave just one' },
   { id: 'gomoku', name: 'Five in a Row', emoji: '⚫', color: '#d9a95b', desc: 'Gomoku vs the watch' },
+  { id: 'wordsearch', name: 'Word Search', emoji: '🔤', color: '#ff9f0a', desc: 'Find 5 hidden words' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
@@ -111,7 +112,7 @@ window.CATEGORIES = {
   Arcade: ['snakeio', 'blobio', 'flappy', 'stack', 'dino', 'knife', 'colorswitch', 'invaders', 'fruit', 'dodge', 'cave', 'hop',
     'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase', 'cycles', 'tugofwar', 'rhythm', 'dash', 'helix', 'snakeblocks', 'pinball', 'twistit'],
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes', 'gems', 'ballsort', 'pegs'],
-  Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds', 'capitals', 'timestables', 'oddone', 'digitspan'],
+  Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds', 'capitals', 'timestables', 'oddone', 'digitspan', 'wordsearch'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers', 'dicepoker', 'gomoku'],
   Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty', 'homerun', 'papertoss', 'skeeball', 'slalom'],
   Fun: ['eightball', 'slots', 'cookie', 'plinko', 'pet', 'fishing', 'bubblewrap'],
