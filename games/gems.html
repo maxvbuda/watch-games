@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Gem Swap</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const N = 7, GEMS = ['💎', '🔶', '🟢', '🟣', '❤️', '⭐️'], MOVES = 20;
+    let g, drop, score, moves, busy = false, pops = [], state = 'ready', combo = 0;
+
+    const at = (x, y) => g[y * N + x];
+    function matches() {
+      const hit = new Set();
+      for (let y = 0; y < N; y++) for (let x = 0; x < N - 2; x++) {
+        const v = at(x, y);
+        if (v >= 0 && at(x + 1, y) === v && at(x + 2, y) === v) for (let k = x; k < N && at(k, y) === v; k++) hit.add(y * N + k);
+      }
+      for (let x = 0; x < N; x++) for (let y = 0; y < N - 2; y++) {
+        const v = at(x, y);
+        if (v >= 0 && at(x, y + 1) === v && at(x, y + 2) === v) for (let k = y; k < N && at(x, k) === v; k++) hit.add(k * N + x);
+      }
+      return hit;
+    }
+
+    function fill() {
+      g = Array.from({ length: N * N }, () => W.randInt(0, GEMS.length - 1));
+      while (matches().size) for (const i of matches()) g[i] = W.randInt(0, GEMS.length - 1);
+      drop = new Array(N * N).fill(0);
+    }
+
+    // Clear matches, let gems fall, refill from the top; repeat while cascades happen.
+    function resolve() {
+      const hit = matches();
+      if (!hit.size) { busy = false; combo = 0; checkEnd(); return; }
+      combo++;
+      score += hit.size * 10 * combo;
+      updateHud();
+      const cs = cellSize();
+      for (const i of hit) pops.push({ x: cs.ox + (i % N + 0.5) * cs.c, y: cs.oy + (Math.floor(i / N) + 0.5) * cs.c, t: 0.35, e: GEMS[g[i]] });
+      for (const i of hit) g[i] = -1;
+      for (let x = 0; x < N; x++) {
+        let write = N - 1;
+        for (let y = N - 1; y >= 0; y--) if (g[y * N + x] >= 0) { const v = g[y * N + x]; g[y * N + x] = -1; g[write * N + x] = v; drop[write * N + x] = write - y; write--; }
+        for (let y = write; y >= 0; y--) { g[y * N + x] = W.randInt(0, GEMS.length - 1); drop[y * N + x] = write + 1 + (write - y); }
+      }
+      setTimeout(resolve, 260);
+    }
+
+    function swap(a, b) {
+      if (busy || state !== 'play') return;
+      [g[a], g[b]] = [g[b], g[a]];
+      if (!matches().size) { [g[a], g[b]] = [g[b], g[a]]; return; }   // not a match: no move
+      moves--;
+      busy = true;
+      updateHud();
+      resolve();
+    }
+
+    function checkEnd() {
+      if (moves > 0) return;
+      state = 'over';
+      const best = W.best('gems', score);
+      setTimeout(() => W.overlay({ title: 'Out of moves!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 300);
+    }
+    function updateHud() { hud.innerHTML = `${score}<small>${moves} moves${combo > 1 ? ' · combo ×' + combo : ''}</small>`; }
+    function cellSize() { const c = Math.min((view.w - 6) / N, (view.h - 34) / N); return { c, ox: (view.w - c * N) / 2, oy: view.h - c * N - 3 }; }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#120b24'; ctx.fillRect(0, 0, w, h);
+      const { c, ox, oy } = cellSize();
+      for (let i = 0; i < N * N; i++) {
+        const x = i % N, y = Math.floor(i / N);
+        ctx.fillStyle = (x + y) % 2 ? '#1e1438' : '#251a44';
+        ctx.fillRect(ox + x * c, oy + y * c, c, c);
+      }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000';
+      ctx.font = `${Math.round(c * 0.72)}px sans-serif`;
+      for (let i = 0; i < N * N; i++) {
+        if (g[i] < 0) continue;
+        drop[i] = Math.max(0, drop[i] - dt * 14);
+        const x = i % N, y = Math.floor(i / N) - drop[i];
+        ctx.fillText(GEMS[g[i]], ox + (x + 0.5) * c, oy + (y + 0.55) * c);
+      }
+      if (sel !== null) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(ox + (sel % N) * c + 1, oy + Math.floor(sel / N) * c + 1, c - 2, c - 2); }
+      for (const p of pops) { p.t -= dt; ctx.globalAlpha = Math.max(0, p.t * 3); ctx.font = `${Math.round(c * (1.2 - p.t))}px sans-serif`; ctx.fillText('✨', p.x, p.y); }
+      ctx.globalAlpha = 1;
+      pops = pops.filter(p => p.t > 0);
+    }
+
+    // Swipe a gem toward a neighbour to swap. Tap-tap also works.
+    let sel = null, start0 = null;
+    const cellAt = p => { const { c, ox, oy } = cellSize(); const x = Math.floor((p.x - ox) / c), y = Math.floor((p.y - oy) / c); return x >= 0 && y >= 0 && x < N && y < N ? y * N + x : null; };
+    W.pointer(canvas, {
+      down(p) { start0 = { p, i: cellAt(p) }; },
+      move(p) {
+        if (!start0 || start0.i === null) return;
+        const dx = p.x - start0.p.x, dy = p.y - start0.p.y;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 12) return;
+        const i = start0.i, x = i % N, y = Math.floor(i / N);
+        const [nx, ny] = Math.abs(dx) > Math.abs(dy) ? [x + Math.sign(dx), y] : [x, y + Math.sign(dy)];
+        start0 = null; sel = null;
+        if (nx >= 0 && ny >= 0 && nx < N && ny < N) swap(i, ny * N + nx);
+      },
+      up(p) {
+        if (!start0) return;
+        const i = start0.i; start0 = null;
+        if (i === null) return;
+        if (sel !== null && Math.abs(sel % N - i % N) + Math.abs(Math.floor(sel / N) - Math.floor(i / N)) === 1) { const a = sel; sel = null; swap(a, i); }
+        else sel = i;
+      },
+    });
+
+    function start() { fill(); score = 0; moves = MOVES; combo = 0; busy = false; sel = null; updateHud(); state = 'play'; }
+    fill(); score = 0; moves = MOVES; updateHud();
+    W.overlay({ title: '💎 Gem Swap', text: `Swipe gems to make rows<br>of 3+. Cascades combo!<br>${MOVES} moves.`, onStart: start });
+    W.loop(render);
+  </script>
+</body>
+</html>
