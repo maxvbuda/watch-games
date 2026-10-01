@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Times Tables</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 30px 6px max(6px, env(safe-area-inset-bottom)); gap: 4px; }
+    #q { text-align: center; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    #a { text-align: center; font-size: 18px; font-weight: 700; color: #64d2ff; min-height: 22px; font-variant-numeric: tabular-nums; }
+    #pad { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+    #pad button { border: 0; border-radius: 8px; background: #2c2c2e; color: #fff; font: inherit; font-size: 15px; font-weight: 700; }
+    #pad .ok { background: #30d158; color: #000; }
+    #timer { position: absolute; left: 38px; right: 60px; top: max(14px, env(safe-area-inset-top)); height: 5px; border-radius: 3px; background: #ffffff22; overflow: hidden; }
+    #bar { height: 100%; background: #30d158; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="q"></div><div id="a"></div><div id="pad"></div></div>
+  <div id="timer"><div id="bar"></div></div>
+  <div class="hud" id="hud">0</div>
+  <script src="../js/common.js"></script>
+  <script>
+    // Type the answer on the keypad; it submits automatically once it's right. 60 seconds.
+    const $ = id => document.getElementById(id);
+    let a, b, typed, score, timeLeft, playing = false;
+    for (const k of ['1', '2', '3', '⌫', '4', '5', '6', '0', '7', '8', '9', 'C']) {
+      const btn = document.createElement('button');
+      btn.textContent = k;
+      if (k === '⌫' || k === 'C') btn.style.background = '#48484a';
+      const go = e => { e.preventDefault(); key(k); };
+      btn.addEventListener('touchstart', go, { passive: false });
+      btn.addEventListener('mousedown', go);
+      $('pad').appendChild(btn);
+    }
+    function next() { const top = Math.min(12, 5 + Math.floor(score / 4)); a = W.randInt(2, top); b = W.randInt(2, 12); typed = ''; $('q').textContent = `${a} × ${b}`; $('a').textContent = '?'; }
+    function key(k) {
+      if (!playing) return;
+      if (k === 'C') typed = ''; else if (k === '⌫') typed = typed.slice(0, -1); else if (typed.length < 3) typed += k;
+      $('a').textContent = typed || '?';
+      if (Number(typed) === a * b) { score++; timeLeft = Math.min(60, timeLeft + 1); $('hud').textContent = score; $('a').style.color = '#30d158'; setTimeout(() => { $('a').style.color = ''; next(); }, 180); }
+    }
+    function start() { score = 0; timeLeft = 60; playing = true; $('hud').textContent = '0'; next(); }
+    W.loop(dt => {
+      if (!playing) return;
+      timeLeft -= dt;
+      $('bar').style.width = Math.max(0, timeLeft / 60 * 100) + '%';
+      if (timeLeft <= 0) { playing = false; const best = W.best('timestables', score); W.overlay({ title: "Time's up!", big: score, text: `Best ${best}`, button: 'Again', onStart: start }); }
+    });
+    window.addEventListener('keydown', e => { if (/^[0-9]$/.test(e.key)) key(e.key); if (e.key === 'Backspace') key('⌫'); });
+    W.overlay({ title: '✖️ Times Tables', text: 'Type the answer — it checks<br>itself. Right = +1 second.', onStart: start });
+  </script>
+</body>
+</html>
