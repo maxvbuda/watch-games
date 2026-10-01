@@ -113,13 +113,14 @@ window.GAMES = [
   { id: 'bricksballs', name: 'Bricks & Balls', emoji: '⚪', color: '#5e5ce6', desc: 'Aim a stream of balls at bricks' },
   { id: 'flags', name: 'Flag Quiz', emoji: '🏳️', color: '#ff453a', desc: 'Name the country from its flag' },
   { id: 'squash', name: 'Squash', emoji: '🎾', color: '#d9c3a0', desc: 'Solo rally — Crown moves the racket' },
+  { id: 'tiletrio', name: 'Tile Trio', emoji: '🍓', color: '#8b5a2b', desc: 'Match 3 tiles, keep the tray clear' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
 window.CATEGORIES = {
   Arcade: ['snakeio', 'blobio', 'flappy', 'stack', 'dino', 'knife', 'colorswitch', 'invaders', 'fruit', 'dodge', 'cave', 'hop',
     'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase', 'cycles', 'tugofwar', 'rhythm', 'dash', 'helix', 'snakeblocks', 'pinball', 'twistit', 'burger', 'jetpack', 'bricksballs'],
-  Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes', 'gems', 'ballsort', 'pegs', 'dropmerge'],
+  Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes', 'gems', 'ballsort', 'pegs', 'dropmerge', 'tiletrio'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds', 'capitals', 'timestables', 'oddone', 'digitspan', 'wordsearch', 'memorygrid', 'flags'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers', 'dicepoker', 'gomoku'],
   Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty', 'homerun', 'papertoss', 'skeeball', 'slalom', 'keepyuppy', 'squash'],

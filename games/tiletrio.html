@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Tile Trio</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const TYPES = ['🍓', '🍋', '🍇', '🥝', '🍑', '🫐', '🍒', '🥥'];
+    // Tiles are stacked in 3 layers; only uncovered tiles can be tapped. Tap a tile to move it to the tray —
+    // three of a kind vanish. If the 7-slot tray fills up, you lose.
+    let tiles, tray, state = 'ready', level = 1;
+
+    function deal() {
+      const spots = [];
+      for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) spots.push({ L: 0, x: 2 * i, y: 2 * j });
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) spots.push({ L: 1, x: 2 * i + 1, y: 2 * j + 1 });
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) spots.push({ L: 2, x: 2 * i + 2, y: 2 * j + 2 });
+      const n = 48, kinds = Math.min(TYPES.length, 5 + level);
+      const bag = W.shuffle(Array.from({ length: n }, (_, i) => Math.floor(i / 3) % kinds));
+      tiles = W.shuffle(spots).slice(0, n).map((s, i) => ({ ...s, t: bag[i], gone: false }));
+      tray = [];
+      updateHud();
+    }
+    const covered = a => tiles.some(b => !b.gone && b.L > a.L && Math.abs(b.x - a.x) < 2 && Math.abs(b.y - a.y) < 2);
+    function updateHud() { hud.innerHTML = `${tiles.filter(t => !t.gone).length}<small>tiles left</small>`; }
+
+    function geo() { const u = Math.min((view.w - 10) / 10, (view.h - 80) / 10); return { u, ox: (view.w - u * 10) / 2, oy: 30 }; }
+    function tap(p) {
+      if (state !== 'play') return;
+      const { u, ox, oy } = geo();
+      // Topmost uncovered tile under the finger.
+      const hit = tiles.filter(t => !t.gone && !covered(t) && p.x >= ox + t.x * u && p.x <= ox + (t.x + 2) * u && p.y >= oy + t.y * u && p.y <= oy + (t.y + 2) * u).sort((a, b) => b.L - a.L)[0];
+      if (!hit) return;
+      hit.gone = true;
+      // Insert next to matching tiles so trios line up.
+      const at = tray.lastIndexOf(hit.t);
+      tray.splice(at >= 0 ? at + 1 : tray.length, 0, hit.t);
+      if (tray.filter(t => t === hit.t).length === 3) tray = tray.filter(t => t !== hit.t);
+      updateHud();
+      if (tiles.every(t => t.gone)) { state = 'won'; W.best('tiletrio', level); setTimeout(() => W.overlay({ title: 'Board cleared! 🎉', big: 'Level ' + level, button: 'Next level', onStart: () => { level++; deal(); state = 'play'; } }), 300); }
+      else if (tray.length >= 7) { state = 'over'; setTimeout(() => W.overlay({ title: 'Tray full!', text: `Level ${level}`, button: 'Retry', onStart: () => { deal(); state = 'play'; } }), 300); }
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#2b1d0e'; ctx.fillRect(0, 0, w, h);
+      const { u, ox, oy } = geo();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const L of [0, 1, 2]) for (const t of tiles) {
+        if (t.gone || t.L !== L) continue;
+        const x = ox + t.x * u, y = oy + t.y * u, s = u * 2, cov = covered(t);
+        ctx.fillStyle = '#8b5a2b'; ctx.fillRect(x + 1, y + 3, s - 2, s - 2);
+        ctx.fillStyle = cov ? '#9e9a8e' : '#f5ecd7'; ctx.fillRect(x + 1, y + 1, s - 2, s - 3);
+        ctx.globalAlpha = cov ? 0.45 : 1; ctx.fillStyle = '#000';
+        ctx.font = `${Math.round(s * 0.62)}px sans-serif`; ctx.fillText(TYPES[t.t], x + s / 2, y + s / 2);
+        ctx.globalAlpha = 1;
+      }
+      // Tray.
+      const ts = Math.min((w - 12) / 7, 26), tx = (w - ts * 7) / 2, ty = h - ts - 6;
+      ctx.fillStyle = '#5c3a1e'; ctx.fillRect(tx - 3, ty - 3, ts * 7 + 6, ts + 6);
+      for (let i = 0; i < 7; i++) {
+        ctx.fillStyle = '#3b2412'; ctx.fillRect(tx + i * ts + 1, ty, ts - 2, ts);
+        if (tray[i] !== undefined) { ctx.fillStyle = '#f5ecd7'; ctx.fillRect(tx + i * ts + 1, ty, ts - 2, ts); ctx.fillStyle = '#000'; ctx.font = `${Math.round(ts * 0.65)}px sans-serif`; ctx.fillText(TYPES[tray[i]], tx + i * ts + ts / 2, ty + ts / 2 + 1); }
+      }
+    }
+    W.pointer(canvas, { down: tap });
+    deal();
+    W.overlay({ title: '🍓 Tile Trio', text: 'Tap uncovered tiles to move<br>them to the tray. 3 alike<br>vanish. Don\'t fill the tray!', onStart: () => (state = 'play') });
+    W.loop(render);
+  </script>
+</body>
+</html>
