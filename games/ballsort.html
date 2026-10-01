@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Ball Sort</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const COLORS = ['#ff453a', '#ffd60a', '#30d158', '#0a84ff', '#bf5af2', '#ff9f0a', '#64d2ff', '#ff6fb5'];
+    const CAP = 4;
+    // Tap a tube to lift its top ball, tap another to drop it (only onto the same colour or an empty tube).
+    let tubes, sel, moves, level = 1, history;
+
+    // Depth-first search with memo: is this layout solvable? (Capped so it stays fast.)
+    function solvable(start) {
+      const seen = new Set(), stack = [start];
+      let nodes = 0;
+      while (stack.length && nodes < 40000) {
+        const t = stack.pop(); nodes++;
+        if (t.every(x => x.length === 0 || (x.length === CAP && x.every(b => b === x[0])))) return true;
+        const key = t.map(x => x.join('')).sort().join('|');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        for (let a = 0; a < t.length; a++) {
+          const from = t[a];
+          if (!from.length || (from.length === CAP && from.every(b => b === from[0]))) continue;
+          for (let b = 0; b < t.length; b++) {
+            const to = t[b];
+            if (a === b || to.length >= CAP || (to.length && to[to.length - 1] !== from[from.length - 1])) continue;
+            if (!to.length && from.every(x => x === from[0])) continue;   // pointless move
+            const n = t.map(x => [...x]); n[b].push(n[a].pop()); stack.push(n);
+          }
+        }
+      }
+      return false;
+    }
+
+    function newLevel() {
+      const colors = Math.min(3 + level, COLORS.length);
+      // Random layouts with two empty tubes, re-dealt until the solver confirms they can be solved.
+      do {
+        const all = W.shuffle(Array.from({ length: colors * CAP }, (_, i) => Math.floor(i / CAP)));
+        tubes = Array.from({ length: colors }, (_, i) => all.slice(i * CAP, i * CAP + CAP));
+        tubes.push([], []);
+      } while (!solvable(tubes.map(t => [...t])) || solved());
+      sel = null; moves = 0; history = [];
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `L${level}<small>${moves} moves</small>`; }
+    const solved = () => tubes.every(t => t.length === 0 || (t.length === CAP && t.every(b => b === t[0])));
+
+    function layout() {
+      const n = tubes.length, perRow = n > 6 ? Math.ceil(n / 2) : n, rows = n > perRow ? 2 : 1;
+      const tw = Math.min(30, (view.w - 8) / perRow - 4), th = Math.min((view.h - 40) / rows - 10, tw * CAP + 10);
+      return { n, perRow, rows, tw, th, r: Math.min(tw * 0.42, (th - 8) / CAP / 2) };
+    }
+    function tubePos(i) {
+      const L = layout(), row = Math.floor(i / L.perRow), col = i % L.perRow, inRow = row === 0 ? L.perRow : L.n - L.perRow;
+      const gap = (view.w - inRow * L.tw) / (inRow + 1);
+      return { x: gap + col * (L.tw + gap), y: 36 + row * (L.th + 10), ...L };
+    }
+
+    function tap(p) {
+      for (let i = 0; i < tubes.length; i++) {
+        const t = tubePos(i);
+        if (p.x < t.x - 4 || p.x > t.x + t.tw + 4 || p.y < t.y - 14 || p.y > t.y + t.th + 4) continue;
+        if (sel === null) { if (tubes[i].length) sel = i; }
+        else if (sel === i) sel = null;
+        else {
+          const from = tubes[sel], to = tubes[i], ball = from[from.length - 1];
+          if (to.length < CAP && (!to.length || to[to.length - 1] === ball)) {
+            history.push(tubes.map(t => [...t]));
+            to.push(from.pop()); moves++; updateHud();
+            if (solved()) { W.best('ballsort', level); setTimeout(() => W.overlay({ title: 'Sorted! 🧪', big: moves + ' moves', text: `Level ${level}`, button: 'Next level', onStart: () => { level++; newLevel(); } }), 300); }
+          }
+          sel = null;
+        }
+        return;
+      }
+      sel = null;
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#0d0d16'; ctx.fillRect(0, 0, w, h);
+      tubes.forEach((tube, i) => {
+        const t = tubePos(i);
+        ctx.strokeStyle = sel === i ? '#ffd60a' : '#8e8e93'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(t.x, t.y + t.th - t.tw / 2); ctx.arc(t.x + t.tw / 2, t.y + t.th - t.tw / 2, t.tw / 2, Math.PI, 0, true); ctx.lineTo(t.x + t.tw, t.y); ctx.stroke();
+        tube.forEach((b, k) => {
+          const lifted = sel === i && k === tube.length - 1;
+          const cy = lifted ? t.y - 10 : t.y + t.th - t.r - 3 - k * t.r * 2.1;
+          ctx.fillStyle = COLORS[b]; ctx.beginPath(); ctx.arc(t.x + t.tw / 2, cy, t.r, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffffff55'; ctx.beginPath(); ctx.arc(t.x + t.tw / 2 - t.r * 0.3, cy - t.r * 0.3, t.r * 0.3, 0, Math.PI * 2); ctx.fill();
+        });
+      });
+      ctx.fillStyle = '#8e8e93'; ctx.font = '600 10px -apple-system, system-ui'; ctx.textAlign = 'center';
+      ctx.fillText('↶ swipe down to undo', w / 2, h - 6);
+    }
+
+    let s0 = null;
+    W.pointer(canvas, {
+      down: p => (s0 = p),
+      up: p => {
+        if (!s0) return;
+        if (p.y - s0.y > 30 && history.length) { tubes = history.pop(); sel = null; moves++; updateHud(); }
+        else if (Math.abs(p.y - s0.y) < 15) tap(s0);
+        s0 = null;
+      },
+    });
+    newLevel();
+    W.overlay({ title: '🧪 Ball Sort', text: 'Tap a tube, then another,<br>to move the top ball. Same<br>colour or empty only!', onStart() {} });
+    W.loop(render);
+  </script>
+</body>
+</html>
