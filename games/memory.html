@@ -9,12 +9,12 @@
   <style>
     #area { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 28px; }
     #grid {
-      --size: min(96vw, calc(100vh - 34px));
+      --size: min(96vw, calc((100vh - 34px) * 4 / var(--rows, 4)));
       width: var(--size);
-      height: var(--size);
+      height: calc(var(--size) * var(--rows, 4) / 4);
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      grid-template-rows: repeat(4, 1fr);
+      grid-template-rows: repeat(var(--rows, 4), 1fr);
       gap: 4px;
       perspective: 400px;
     }
@@ -39,15 +39,32 @@
   <div id="area"><div id="grid"></div></div>
   <div class="hud" id="hud"></div>
   <script src="../js/common.js"></script>
+  <script src="../js/packs.js"></script>
   <script>
-    const EMOJI = ['🍕', '🚀', '🐶', '🌈', '⚽️', '🎸', '🍩', '🦄', '🐙', '🌵', '🎲', '🍉', '🦊', '⭐️'];
+    const THEMES = [
+      ['🍕', '🚀', '🐶', '🌈', '⚽️', '🎸', '🍩', '🦄', '🐙', '🌵', '🎲', '🍉', '🦊', '⭐️'],
+      ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸'],
+      ['🍎', '🍌', '🍇', '🍓', '🍒', '🍑', '🥝', '🍍', '🥥', '🍋', '🍉', '🫐', '🍐', '🥭'],
+      ['⚽️', '🏀', '🏈', '⚾️', '🎾', '🏐', '🏉', '🎱', '🏓', '🏸', '🥊', '⛳️', '🎳', '🏒'],
+      ['🚗', '🚕', '🚙', '🚌', '🚓', '🚑', '🚒', '🚜', '🚲', '🛵', '🚀', '✈️', '🚁', '⛵️'],
+      ['😀', '😂', '😍', '😎', '🤔', '😴', '😡', '🥳', '🤯', '😱', '🤠', '🥶', '🤢', '😇'],
+      ['🌸', '🌻', '🌵', '🍄', '🌲', '🍁', '🌊', '🌙', '⭐️', '☀️', '⛄️', '🌈', '⚡️', '🔥'],
+      ['🍔', '🍟', '🌭', '🍿', '🧁', '🍩', '🍪', '🍦', '🥨', '🌮', '🍣', '🥐', '🍝', '🧀'],
+      ['🎸', '🎹', '🥁', '🎺', '🎻', '🪕', '🎷', '🎤', '🎧', '📻', '🎼', '🪗', '🔔', '📯'],
+      ['🪐', '🌍', '🌕', '☄️', '🛸', '👽', '🚀', '🛰️', '🔭', '🌌', '⭐️', '🌞', '🌑', '👾'],
+    ];
+    const EMOJI = THEMES[W.num('theme', 0) % THEMES.length];
+    const PAIRS = W.num('pairs', 8);
+    document.getElementById('grid').style.setProperty('--rows', PAIRS / 2);
     const gridEl = document.getElementById('grid');
     const hud = document.getElementById('hud');
     let cards, open, moves, matched, lock;
 
     function start() {
-      const picks = [...EMOJI].sort(() => Math.random() - 0.5).slice(0, 8);
-      const deck = [...picks, ...picks].sort(() => Math.random() - 0.5);
+      W.packSeed();
+      const picks = W.shuffle([...EMOJI]).slice(0, PAIRS);
+      const deck = W.shuffle([...picks, ...picks]);
+      W.unseed();
       gridEl.innerHTML = '';
       open = [];
       moves = 0;
@@ -82,6 +99,7 @@
         open = [];
         matched += 2;
         if (matched === cards.length) {
+          if (W.packDone({ title: 'All matched! 🎉', big: moves + ' moves' })) return;
           const best = W.best('memory', moves, true);
           setTimeout(() => W.overlay({ title: 'All matched! 🎉', big: moves + ' moves', text: `Best ${best}`, button: 'Again', onStart: start }), 600);
         }

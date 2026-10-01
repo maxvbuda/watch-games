@@ -1,6 +1,6 @@
 # Watch Games
 
-80 games plus 9 level packs — 2,260 games & levels in all — built for Apple Watch Safari (they work on phones and computers too).
+80 games plus 11 level packs — 2,498 games & levels in all — built for Apple Watch Safari (they work on phones and computers too).
 
 **Play:** https://maxvbuda.github.io/watch-games/
 

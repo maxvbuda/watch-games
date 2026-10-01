@@ -25,6 +25,9 @@
       opts: n => ({ colors: step(n, 12, 4, 8), len: step(n, 20, 3, 5) }) },
     mines: { name: 'Minesweeper Pack', emoji: '💣', color: '#8e8e93', count: 60, game: 'mines',
       opts: n => ({ mines: step(n, 6, 6, 15) }) },
+    memory: { name: 'Memory Pack', emoji: '🃏', color: '#bf5af2', count: 120, game: 'memory',
+      opts: n => ({ theme: (n - 1) % 10, pairs: n <= 40 ? 8 : n <= 80 ? 10 : 12 }) },
+    five: { name: 'Five Word Pack', emoji: '🟩', color: '#30d158', count: 118, game: 'five', opts: () => ({}) },
   };
 
   for (const [id, p] of Object.entries(P)) {

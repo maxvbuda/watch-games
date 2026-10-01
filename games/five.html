@@ -28,6 +28,7 @@
   <div id="area"><div id="grid"></div><div id="kb"></div></div>
   <div class="hud" id="hud"></div>
   <script src="../js/common.js"></script>
+  <script src="../js/packs.js"></script>
   <script>
     const WORDS = ('APPLE BEACH BRAIN BREAD CHAIR CHESS CLOCK CLOUD CRANE DANCE DREAM EAGLE EARTH FEAST FIELD FLAME FLOOR FRUIT ' +
       'GHOST GIANT GLASS GRAPE GREEN HEART HONEY HORSE HOUSE JUICE KNIFE LEMON LIGHT MAGIC MANGO MONEY MOUSE MUSIC NIGHT NURSE ' +
@@ -85,6 +86,7 @@
       if (won || rows.length === 6) {
         done = true;
         streak = won ? streak + 1 : 0;
+        if (won && W.packDone({ title: 'Got it! 🟩', big: answer, text: `${rows.length} guesses` })) return;
         if (won) W.best('five', streak);
         setTimeout(() => W.overlay({ title: won ? ['Genius!', 'Magnificent!', 'Impressive!', 'Splendid!', 'Great!', 'Phew!'][rows.length - 1] : 'So close!', big: answer, text: `Streak ${streak}`, button: 'Next word', onStart: start }), 700);
       }
@@ -107,7 +109,7 @@
       if (e.key === 'Enter') key('↵');
     });
 
-    function start() { answer = W.pick(WORDS); rows = []; cur = ''; done = false; keyState = {}; draw(); }
+    function start() { answer = W.params.pack ? WORDS[(W.num('n', 1) * 37) % WORDS.length] : W.pick(WORDS); rows = []; cur = ''; done = false; keyState = {}; draw(); }
     build();
     start();
     W.overlay({ title: '🟩 Five', text: 'Guess the 5-letter word<br>in 6 tries. 🟩 right spot,<br>🟨 wrong spot.', onStart() {} });
