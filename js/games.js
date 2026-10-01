@@ -117,6 +117,7 @@ window.GAMES = [
   { id: 'bulletdodge', name: 'Bullet Dodge', emoji: '💠', color: '#ff375f', desc: 'Survive the bullet patterns' },
   { id: 'dragrace', name: 'Drag Race', emoji: '🏁', color: '#30d158', desc: 'Launch on green, shift perfectly' },
   { id: 'archery', name: 'Archery', emoji: '🏹', color: '#5aa04a', desc: 'Crown aims, hold to draw' },
+  { id: 'pancake', name: 'Pancake Flip', emoji: '🥞', color: '#f2c66d', desc: 'Flip and serve perfect pancakes' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
@@ -127,6 +128,6 @@ window.CATEGORIES = {
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds', 'capitals', 'timestables', 'oddone', 'digitspan', 'wordsearch', 'memorygrid', 'flags'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers', 'dicepoker', 'gomoku'],
   Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty', 'homerun', 'papertoss', 'skeeball', 'slalom', 'keepyuppy', 'squash', 'dragrace', 'archery'],
-  Fun: ['eightball', 'slots', 'cookie', 'plinko', 'pet', 'fishing', 'bubblewrap'],
+  Fun: ['eightball', 'slots', 'cookie', 'plinko', 'pet', 'fishing', 'bubblewrap', 'pancake'],
 };
 window.CROWN = ['archery', 'squash', 'bricksballs', 'burger', 'twistit', 'slalom', 'snakeblocks', 'helix', 'tugofwar', 'fishing', 'buggy', 'safe', 'artillery', 'lander', 'pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];

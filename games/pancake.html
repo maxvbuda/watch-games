@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Pancake Flip</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // Cook both sides golden: flip (swipe up) when the side is done, serve (swipe right) when both are. Don't burn it!
+    let cakes, served, burnt, state = 'ready', t = 0, msg = '', msgT = 0, order;
+    function newCake() { return { side: [0, 0], up: 0, flipT: 0, y: 0 }; }
+    function reset() { cakes = newCake(); served = 0; burnt = 0; order = W.rand(0.55, 0.85); updateHud(); }
+    function updateHud() { hud.innerHTML = `${served} 🥞<small>${'🔥'.repeat(burnt)}</small>`; }
+    const shade = c => (c < 0.35 ? '#f5e3b3' : c < 0.6 ? '#f2c66d' : c < 0.85 ? '#d99a3a' : c < 1.05 ? '#a8641e' : '#3a2410');
+    function swipe(d) {
+      if (state !== 'play' || cakes.flipT > 0) return;
+      if (d === 'up') { cakes.flipT = 0.6; }
+      if (d === 'right') {
+        const [a, b] = cakes.side, good = x => x > order - 0.18 && x < order + 0.18;
+        if (good(a) && good(b)) { served++; msg = 'Perfect stack! 😋'; }
+        else if (a > 1.05 || b > 1.05) { burnt++; msg = 'Burnt! 🔥'; }
+        else { burnt++; msg = a < 0.3 || b < 0.3 ? 'Raw side! 🤢' : 'Not quite…'; }
+        msgT = 1; cakes = newCake(); order = W.rand(0.55, 0.85); updateHud();
+        if (burnt >= 3) { state = 'over'; const best = W.best('pancake', served); setTimeout(() => W.overlay({ title: 'Kitchen fire! 🧯', big: served + ' 🥞', text: `Best ${best}`, button: 'Again', onStart: start }), 500); }
+      }
+    }
+    function update(dt) {
+      t += dt;
+      const heat = 0.32 + served * 0.02;
+      if (cakes.flipT > 0) { cakes.flipT -= dt; if (cakes.flipT <= 0.3 && !cakes.flipped) { cakes.up = 1 - cakes.up; cakes.flipped = true; } if (cakes.flipT <= 0) cakes.flipped = false; }
+      else cakes.side[1 - cakes.up] += heat * dt;   // the face-down side cooks
+      if (cakes.side[1 - cakes.up] > 1.25) swipe('right');
+    }
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#2b2b2e'; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#ff9f0a22'; ctx.beginPath(); ctx.ellipse(w / 2, h * 0.75, w * 0.4, 14, 0, 0, 7); ctx.fill();
+      // Pan.
+      ctx.fillStyle = '#48484a'; ctx.beginPath(); ctx.ellipse(w / 2, h * 0.68, w * 0.36, 20, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#1c1c1e'; ctx.beginPath(); ctx.ellipse(w / 2, h * 0.67, w * 0.32, 16, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#3a3a3c'; ctx.fillRect(w / 2 + w * 0.34, h * 0.67 - 3, w * 0.2, 6);
+      // Pancake: rises and spins during a flip.
+      const f = cakes.flipT > 0 ? 1 - Math.abs(cakes.flipT - 0.3) / 0.3 : 0;
+      const y = h * 0.66 - f * h * 0.3, squash = cakes.flipT > 0 ? Math.abs(Math.cos((0.6 - cakes.flipT) / 0.6 * Math.PI)) : 1;
+      ctx.fillStyle = shade(cakes.side[cakes.up]);
+      ctx.beginPath(); ctx.ellipse(w / 2, y, w * 0.22, Math.max(2, 9 * squash), 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#0003'; ctx.lineWidth = 1; ctx.stroke();
+      // Doneness meters for both sides (top = visible side).
+      const meter = (x, v, label) => {
+        ctx.fillStyle = '#0006'; ctx.fillRect(x, 40, 10, 60);
+        ctx.fillStyle = '#30d15855'; ctx.fillRect(x, 40 + 60 * (1 - Math.min(1.25, order + 0.18) / 1.25), 10, 60 * 0.36 / 1.25);
+        ctx.fillStyle = shade(v); const hh = 60 * Math.min(1, v / 1.25); ctx.fillRect(x + 2, 100 - hh, 6, hh);
+        ctx.fillStyle = '#8e8e93'; ctx.font = '600 8px -apple-system, system-ui'; ctx.textAlign = 'center'; ctx.fillText(label, x + 5, 108);
+      };
+      meter(10, cakes.side[cakes.up], 'top'); meter(w - 20, cakes.side[1 - cakes.up], 'pan');
+      ctx.fillStyle = '#fff'; ctx.font = '600 10px -apple-system, system-ui'; ctx.textAlign = 'center';
+      ctx.fillText('↑ flip   → serve', w / 2, h - 8);
+      if (msgT > 0) { msgT -= dt; ctx.globalAlpha = Math.min(1, msgT * 3); ctx.font = '800 14px -apple-system, system-ui'; ctx.fillText(msg, w / 2, h * 0.3); ctx.globalAlpha = 1; }
+    }
+    W.swipe(canvas, swipe, () => swipe('up'));
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🥞 Pancake Flip', text: 'Tap/swipe ↑ to flip when the<br>pan side is golden (green zone).<br>Swipe → to serve. 3 fails = out.', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
