@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Stop at 10</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #pad { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+    #t { font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    #t.hide { color: transparent; text-shadow: 0 0 12px #fff8; }
+    #m { font-size: 12px; color: var(--muted); text-align: center; }
+  </style>
+</head>
+<body class="game">
+  <div id="pad"><div id="t">0.00</div><div id="m">Tap to start, tap again<br>at exactly 10.00</div></div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    // The timer fades out after 3 seconds — feel the rest!
+    const $ = id => document.getElementById(id);
+    let t0 = 0, running = false;
+    function tap() {
+      if (!running) { t0 = performance.now(); running = true; $('m').textContent = 'Tap at 10.00!'; return; }
+      running = false;
+      const t = (performance.now() - t0) / 1000, off = Math.abs(t - 10);
+      $('t').className = ''; $('t').textContent = t.toFixed(2);
+      const best = W.best('tenseconds', Math.round(off * 100) / 100, true);
+      $('m').innerHTML = (off < 0.05 ? 'PERFECT! 🎯' : off < 0.2 ? 'So close! 🔥' : off < 0.6 ? 'Not bad' : 'Way off 😅') + `<br>off by ${off.toFixed(2)}s · best ${best}s<br>tap to try again`;
+    }
+    $('pad').addEventListener('touchstart', e => { e.preventDefault(); tap(); }, { passive: false });
+    $('pad').addEventListener('mousedown', tap);
+    W.loop(() => {
+      if (!running) return;
+      const t = (performance.now() - t0) / 1000;
+      $('t').textContent = t.toFixed(2);
+      $('t').className = t > 3 ? 'hide' : '';
+    });
+  </script>
+</body>
+</html>
