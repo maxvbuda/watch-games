@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Burger Stack</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // Catch the order's ingredients in sequence on your bun. Wrong ingredient = lose a life; finish with the top bun!
+    const ING = { patty: ['#6b3a1e', 8], cheese: ['#ffd60a', 4], lettuce: ['#30d158', 4], tomato: ['#ff453a', 5], onion: ['#e8d0ff', 4], bun: ['#e0a050', 9] };
+    let x, tx, stack, order, falling, lives, done, spawnT, state = 'ready', msg = '', msgT = 0;
+    const PW = () => view.w * 0.3;
+
+    function newOrder() {
+      const n = Math.min(3 + Math.floor(done / 2), 7);
+      order = Array.from({ length: n }, () => W.pick(['patty', 'cheese', 'lettuce', 'tomato', 'onion'])).concat('bun');
+      stack = [];
+    }
+    function reset() { x = tx = view.w / 2; lives = 3; done = 0; falling = []; spawnT = 0.5; newOrder(); updateHud(); }
+    function updateHud() { hud.innerHTML = `${done} 🍔<small>${'❤️'.repeat(lives)}</small>`; }
+
+    function update(dt) {
+      x += (tx - x) * Math.min(1, dt * 14);
+      spawnT -= dt;
+      if (spawnT <= 0) {
+        // Mostly what you need next, sometimes something else.
+        const need = order[stack.length];
+        const kind = W.rng() < 0.45 ? need : W.pick(Object.keys(ING));
+        falling.push({ kind, x: W.rand(PW() / 2, view.w - PW() / 2), y: -10, v: view.h * W.rand(0.35, 0.5) * (1 + done * 0.04) });
+        spawnT = W.rand(0.6, 1.0) * Math.max(0.5, 1 - done * 0.04);
+      }
+      const top = view.h - 18 - stack.reduce((a, k) => a + ING[k][1], 0) - 6;
+      for (const f of falling) {
+        f.y += f.v * dt;
+        if (!f.gone && f.y >= top - 4 && f.y <= top + 10 && Math.abs(f.x - x) < PW() * 0.45) {
+          f.gone = true;
+          if (f.kind === order[stack.length]) {
+            stack.push(f.kind);
+            if (stack.length === order.length) { done++; msg = 'Order up! 🍔'; msgT = 1; W.best('burger', done); setTimeout(newOrder, 500); }
+          } else { lives--; msg = `Wrong — needed ${order[stack.length]}`; msgT = 1; }
+          updateHud();
+        }
+      }
+      falling = falling.filter(f => !f.gone && f.y < view.h + 20);
+      if (lives <= 0) { state = 'over'; const best = W.best('burger', done); setTimeout(() => W.overlay({ title: 'Kitchen closed!', big: done + ' 🍔', text: `Best ${best}`, button: 'Again', onStart: start }), 400); }
+    }
+
+    function layer(k, cx, y, w) {
+      const [c, hgt] = ING[k];
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      if (k === 'bun') ctx.ellipse(cx, y, w / 2, hgt, 0, Math.PI, 0);
+      else if (k === 'lettuce') { ctx.moveTo(cx - w / 2 - 3, y); for (let i = 0; i <= 8; i++) ctx.lineTo(cx - w / 2 - 3 + (w + 6) * i / 8, y - (i % 2 ? hgt : 0)); }
+      else ctx.roundRect ? ctx.roundRect(cx - w / 2 * (k === 'cheese' ? 1.05 : 0.95), y - hgt, w * (k === 'cheese' ? 1.05 : 0.95), hgt, 2) : ctx.rect(cx - w / 2, y - hgt, w, hgt);
+      ctx.fill();
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#ffe9c7'; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#d9b07a'; ctx.fillRect(0, h - 10, w, 10);
+      // Order ticket.
+      ctx.fillStyle = '#fff'; ctx.fillRect(6, 32, 40, 12 + order.length * 7);
+      order.slice().reverse().forEach((k, i) => { const idx = order.length - 1 - i; ctx.globalAlpha = idx < stack.length ? 0.25 : 1; layer(k, 26, 40 + i * 7 + 6, 28); });
+      ctx.globalAlpha = 1;
+      // Plate + bottom bun + stack.
+      const pw = PW();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(x, h - 12, pw * 0.6, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e0a050'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - pw / 2, h - 20, pw, 7, 3) : ctx.rect(x - pw / 2, h - 20, pw, 7); ctx.fill();
+      let y = h - 20;
+      for (const k of stack) { layer(k, x, y, pw); y -= ING[k][1]; }
+      for (const f of falling) layer(f.kind, f.x, f.y, pw * 0.8);
+      if (msgT > 0) { msgT -= dt; ctx.globalAlpha = Math.min(1, msgT * 3); ctx.fillStyle = '#000'; ctx.font = '800 12px -apple-system, system-ui'; ctx.textAlign = 'center'; ctx.fillText(msg, w / 2, h * 0.3); ctx.globalAlpha = 1; }
+    }
+
+    const setTx = v => (tx = W.clamp(v, PW() / 2, view.w - PW() / 2));
+    W.pointer(canvas, { down: p => setTx(p.x), move: p => setTx(p.x) });
+    W.crown(d => { if (state === 'play') setTx(tx + d * 0.8); });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🍔 Burger Stack', text: 'Catch ingredients in the<br>order on the ticket. Drag or<br>turn the Crown. Bun on top!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
