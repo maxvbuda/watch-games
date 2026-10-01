@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Rail Runner</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // World units: lanes are 1 apart (x = -1, 0, 1); z is metres ahead of the runner.
+    const Z0 = 2.2, FAR = 60;
+    let lane, laneX, jumpV, jumpY, roll, speed, dist, coins, items, spawnZ, mag, shoes, state = 'ready', t = 0, crash = 0, dust = [], best = W.best('railrunner') || 0;
+
+    function reset() {
+      lane = 0; laneX = 0; jumpV = 0; jumpY = 0; roll = 0; speed = 11; dist = 0; coins = 0; items = []; spawnZ = 18; mag = 0; shoes = 0; t = 0; crash = 0;
+      updateHud();
+    }
+    function updateHud() { hud.innerHTML = `${Math.floor(dist)}m<small>🪙 ${coins}${mag > 0 ? ' 🧲' : ''}${shoes > 0 ? ' 👟' : ''}</small>`; }
+
+    // Spawn a "row": up to two lanes blocked so there's always a way through, plus coins.
+    function spawnRow(z) {
+      const free = W.randInt(-1, 1), kinds = ['low', 'high', 'train'];
+      for (const l of [-1, 0, 1]) {
+        if (l === free) continue;
+        if (W.rng() < 0.65) {
+          const k = W.pick(dist < 150 ? ['low', 'low', 'high', 'train'] : kinds);
+          items.push({ kind: k, lane: l, z: z, len: k === 'train' ? W.rand(6, 12) : 0.6 });
+        }
+      }
+      // Coins: a line in the free lane, sometimes an arc over a low barrier.
+      for (let k = 0; k < 6; k++) items.push({ kind: 'coin', lane: free, z: z - 6 + k * 1.6, y: 0 });
+      if (W.rng() < 0.08) items.push({ kind: W.pick(['magnet', 'shoes']), lane: free, z: z + 3, y: 0 });
+    }
+
+    function swipe(d) {
+      if (state !== 'play') return;
+      if (d === 'left') lane = Math.max(-1, lane - 1);
+      if (d === 'right') lane = Math.min(1, lane + 1);
+      if (d === 'up' && jumpY <= 0.01) { jumpV = shoes > 0 ? 13 : 9.5; roll = 0; W.sfx(500, { type: 'triangle', dur: 0.12, vol: 0.06, slide: 900 }); }
+      if (d === 'down') { roll = 0.7; if (jumpY > 0) jumpV = -14; W.sfx(200, { type: 'triangle', dur: 0.1, vol: 0.05 }); }
+    }
+
+    function update(dt) {
+      t += dt;
+      speed = Math.min(26, 11 + dist / 120);
+      const dz = speed * dt;
+      dist += dz;
+      laneX += (lane - laneX) * Math.min(1, dt * 14);
+      jumpV -= 30 * dt; jumpY = Math.max(0, jumpY + jumpV * dt); if (jumpY === 0) jumpV = Math.max(jumpV, 0);
+      roll = Math.max(0, roll - dt); mag = Math.max(0, mag - dt); shoes = Math.max(0, shoes - dt);
+      for (const it of items) it.z -= dz;
+      spawnZ -= dz;
+      while (spawnZ < FAR) { spawnRow(spawnZ + 4); spawnZ += W.rand(9, 14) - Math.min(4, dist / 400); }
+      // Collisions at the runner's position (z ≈ 0).
+      const myLane = Math.round(laneX);
+      for (const it of items) {
+        if (it.hit) continue;
+        const near = it.z < 0.6 && it.z + (it.len || 0.6) > -0.4;
+        if (!near) continue;
+        if (it.kind === 'coin' || it.kind === 'magnet' || it.kind === 'shoes') continue;
+        if (it.lane !== myLane) continue;
+        const ok = (it.kind === 'low' && jumpY > 0.7) || (it.kind === 'high' && roll > 0) || (it.kind === 'train' && jumpY > 2.6);
+        if (!ok) { crash = 0.6; state = 'over'; it.hit = true; W.sfx(120, { type: 'sawtooth', dur: 0.4, vol: 0.12, slide: 40 }); return end(); }
+      }
+      for (const it of items) {
+        if (it.hit || it.z > 0.8 || it.z < -0.6) continue;
+        const reach = mag > 0 ? 2.5 : 0.5;
+        if (Math.abs(it.lane - laneX) <= reach && (it.kind !== 'coin' || mag > 0 || Math.abs(it.lane - laneX) < 0.5)) {
+          if (it.kind === 'coin') { it.hit = true; coins++; W.sfx(1300 + (coins % 5) * 120, { type: 'square', dur: 0.04, vol: 0.03 }); }
+          if (it.kind === 'magnet') { it.hit = true; mag = 10; W.sfx(700, { type: 'sine', dur: 0.3, vol: 0.1, slide: 1400 }); }
+          if (it.kind === 'shoes') { it.hit = true; shoes = 10; W.sfx(700, { type: 'sine', dur: 0.3, vol: 0.1, slide: 1400 }); }
+        }
+      }
+      items = items.filter(it => it.z + (it.len || 0) > -3 && !(it.hit && it.kind !== 'train' && it.kind !== 'low' && it.kind !== 'high'));
+      if (jumpY === 0 && W.rng() < dt * 20) dust.push({ x: laneX + W.rand(-0.15, 0.15), z: 0, t: 0.3 });
+      updateHud();
+    }
+    function end() {
+      const score = Math.floor(dist) + coins * 10;
+      best = W.best('railrunner', score);
+      setTimeout(() => W.overlay({ title: 'Busted! 🚨', big: score, text: `${Math.floor(dist)}m + ${coins} coins×10<br>best ${best}`, button: 'Again', onStart: start }), 700);
+    }
+
+    // Perspective projection.
+    const F = () => view.w * 0.55, HOR = () => view.h * 0.3, CAM = 1.6;
+    const P = (x, z, y = 0) => { const s = F() / (z + Z0); return [view.w / 2 + (x - laneX * 0.35) * s, HOR() + (CAM - y) * s, s]; };
+
+    function box(lane, z, len, h, w, front, top, side) {
+      // A box from z to z+len in a lane: draw far faces first.
+      const zf = Math.max(z, -Z0 + 0.3), zb = z + len;
+      if (zb < -Z0 + 0.3) return;
+      const [x0, y0] = P(lane - w / 2, zf, 0), [x1] = P(lane + w / 2, zf, 0), [, yt] = P(lane, zf, h);
+      const [bx0, by0] = P(lane - w / 2, zb, 0), [bx1] = P(lane + w / 2, zb, 0), [, byt] = P(lane, zb, h);
+      ctx.fillStyle = side;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(bx0, by0); ctx.lineTo(bx0, byt); ctx.lineTo(x0, yt); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x1, y0); ctx.lineTo(bx1, by0); ctx.lineTo(bx1, byt); ctx.lineTo(x1, yt); ctx.fill();
+      ctx.fillStyle = top;
+      ctx.beginPath(); ctx.moveTo(x0, yt); ctx.lineTo(x1, yt); ctx.lineTo(bx1, byt); ctx.lineTo(bx0, byt); ctx.fill();
+      ctx.fillStyle = front; ctx.fillRect(x0, yt, x1 - x0, y0 - yt);
+      return [x0, yt, x1 - x0, y0 - yt];
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      const sky = ctx.createLinearGradient(0, 0, 0, HOR()); sky.addColorStop(0, '#5ab0ff'); sky.addColorStop(1, '#cbe8ff');
+      ctx.fillStyle = sky; ctx.fillRect(0, 0, w, HOR() + 1);
+      // Distant city skyline.
+      ctx.fillStyle = '#9fb6cc';
+      for (let k = 0; k < 14; k++) { const bw = 16 + (k * 7) % 13, bh = 10 + (k * 13) % 26, x = ((k * 23 - dist * 0.2) % (w + 40) + w + 40) % (w + 40) - 20; ctx.fillRect(x, HOR() - bh, bw, bh); }
+      ctx.fillStyle = '#8a7a66'; ctx.fillRect(0, HOR(), w, h - HOR());
+      // Track bed per lane with scrolling sleepers.
+      for (const l of [-1, 0, 1]) {
+        const [a0, ay0] = P(l - 0.45, FAR), [a1] = P(l + 0.45, FAR), [b0, by0] = P(l - 0.45, -Z0 + 0.4), [b1] = P(l + 0.45, -Z0 + 0.4);
+        ctx.fillStyle = '#6e6152'; ctx.beginPath(); ctx.moveTo(a0, ay0); ctx.lineTo(a1, ay0); ctx.lineTo(b1, by0); ctx.lineTo(b0, by0); ctx.fill();
+        ctx.strokeStyle = '#4a3d30'; ctx.lineWidth = 1;
+        for (let z = (1 - (dist % 1)); z < FAR; z += 1) { const [s0, sy] = P(l - 0.42, z), [s1] = P(l + 0.42, z); ctx.lineWidth = Math.max(0.5, F() / (z + Z0) * 0.06); ctx.beginPath(); ctx.moveTo(s0, sy); ctx.lineTo(s1, sy); ctx.stroke(); }
+        ctx.strokeStyle = '#c9c9cf'; ctx.lineWidth = 1.2;
+        for (const r of [-0.25, 0.25]) { const [x0, y0] = P(l + r, FAR), [x1, y1] = P(l + r, -Z0 + 0.4); ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+      }
+      // Items far → near.
+      const sorted = [...items].sort((a, b) => b.z - a.z);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const it of sorted) {
+        if (it.z > FAR || it.z + (it.len || 0) < -Z0 + 0.4) continue;
+        if (it.kind === 'train') {
+          const r = box(it.lane, it.z, it.len, 3.1, 0.9, '#d93a3a', '#b02a2a', '#8c2020');
+          if (r) { const [x, y, ww, hh] = r; ctx.fillStyle = '#9fd8ff'; ctx.fillRect(x + ww * 0.15, y + hh * 0.15, ww * 0.7, hh * 0.25); ctx.fillStyle = '#ffd60a'; ctx.fillRect(x + ww * 0.12, y + hh * 0.75, ww * 0.12, hh * 0.08); ctx.fillRect(x + ww * 0.76, y + hh * 0.75, ww * 0.12, hh * 0.08); }
+        } else if (it.kind === 'low') {
+          const r = box(it.lane, it.z, 0.25, 0.75, 0.85, '#fff', '#ddd', '#bbb');
+          if (r) { const [x, y, ww, hh] = r; ctx.fillStyle = '#ff453a'; for (let k = 0; k < 4; k++) ctx.fillRect(x + (k * 2 + 0.5) * ww / 8, y, ww / 8, hh * 0.6); }
+        } else if (it.kind === 'high') {
+          const [px0, py0, s] = P(it.lane - 0.42, it.z), [px1] = P(it.lane + 0.42, it.z), [, ty] = P(it.lane, it.z, 2.0), [, by] = P(it.lane, it.z, 1.25);
+          ctx.fillStyle = '#555'; ctx.fillRect(px0, ty, s * 0.06, py0 - ty); ctx.fillRect(px1 - s * 0.06, ty, s * 0.06, py0 - ty);
+          ctx.fillStyle = '#ffd60a'; ctx.fillRect(px0, ty, px1 - px0, by - ty);
+          ctx.fillStyle = '#000'; for (let k = 0; k < 5; k++) ctx.fillRect(px0 + (k * 2 + 0.5) * (px1 - px0) / 10, ty, (px1 - px0) / 10, by - ty);
+        } else if (!it.hit && it.z > 0.2) {   // pickups vanish once they're beside you (else they balloon at the camera)
+          const [x, y, s] = P(it.lane, it.z, 0.5 + (it.kind === 'coin' ? Math.sin(t * 6 + it.z) * 0.05 : 0.2));
+          ctx.font = `${Math.max(4, Math.round(s * (it.kind === 'coin' ? 0.35 : 0.5)))}px sans-serif`; ctx.fillStyle = '#000';
+          ctx.fillText(it.kind === 'coin' ? '🪙' : it.kind === 'magnet' ? '🧲' : '👟', x, y);
+        }
+      }
+      // Runner, seen from behind.
+      const [rx, ry, s] = P(laneX, 0, 0), sc = s * 0.9;
+      const by = ry - jumpY * s;
+      ctx.fillStyle = '#0004'; ctx.beginPath(); ctx.ellipse(rx, ry, sc * 0.28, sc * 0.08, 0, 0, 7); ctx.fill();
+      const run = Math.sin(t * 18) * (jumpY > 0 || roll > 0 ? 0 : 1);
+      if (roll > 0) { ctx.fillStyle = '#0a84ff'; ctx.beginPath(); ctx.arc(rx, by - sc * 0.25, sc * 0.25, 0, 7); ctx.fill(); ctx.fillStyle = '#f2c28b'; ctx.beginPath(); ctx.arc(rx, by - sc * 0.32, sc * 0.1, 0, 7); ctx.fill(); }
+      else {
+        ctx.fillStyle = '#2c2c2e'; ctx.fillRect(rx - sc * 0.13, by - sc * 0.45 + run * sc * 0.05, sc * 0.1, sc * 0.45); ctx.fillRect(rx + sc * 0.03, by - sc * 0.45 - run * sc * 0.05, sc * 0.1, sc * 0.45);
+        ctx.fillStyle = shoes > 0 ? '#30d158' : '#ff453a'; ctx.fillRect(rx - sc * 0.15, by - sc * 0.06 + run * sc * 0.05, sc * 0.13, sc * 0.07); ctx.fillRect(rx + sc * 0.02, by - sc * 0.06 - run * sc * 0.05, sc * 0.13, sc * 0.07);
+        ctx.fillStyle = '#0a84ff'; ctx.fillRect(rx - sc * 0.2, by - sc * 0.95, sc * 0.4, sc * 0.52);
+        ctx.fillStyle = '#ffd60a'; ctx.fillRect(rx - sc * 0.16, by - sc * 0.85, sc * 0.32, sc * 0.18);   // backpack
+        ctx.fillStyle = '#5a3a1e'; ctx.beginPath(); ctx.arc(rx, by - sc * 1.07, sc * 0.14, 0, 7); ctx.fill();
+        ctx.fillStyle = '#ff453a'; ctx.fillRect(rx - sc * 0.15, by - sc * 1.2, sc * 0.3, sc * 0.08);   // cap
+      }
+      for (const d of dust) { d.t -= dt; const [x, y, ss] = P(d.x, -0.3); ctx.fillStyle = `rgba(220,200,170,${d.t * 2})`; ctx.beginPath(); ctx.arc(x, y - (0.3 - d.t) * 20, ss * 0.05, 0, 7); ctx.fill(); }
+      dust = dust.filter(d => d.t > 0);
+      if (crash > 0) { crash -= dt; ctx.fillStyle = `rgba(255,255,255,${crash})`; ctx.fillRect(0, 0, w, h); }
+    }
+
+    W.swipe(canvas, swipe, () => swipe('up'));
+    let acc = 0;
+    W.crown(d => { acc += d; if (acc > 40) { acc = 0; swipe('right'); } if (acc < -40) { acc = 0; swipe('left'); } });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🚆 Rail Runner', text: 'Swipe ←→ (or turn the Crown)<br>to switch tracks. Swipe ↑ jump,<br>↓ roll. Dodge the trains!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>

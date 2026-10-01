@@ -125,16 +125,17 @@ window.GAMES = [
   { id: 'holeio', name: 'Hole.io', emoji: '🕳️', color: '#30d158', desc: 'Swallow the city, beat 3 rival holes' },
   { id: 'paperio', name: 'Paper.io', emoji: '🟩', color: '#30d158', desc: 'Loop out and claim land vs 3 bots' },
   { id: 'survivor', name: 'Survivor', emoji: '🧙', color: '#30d158', desc: 'Auto-battle hordes, level up, survive 5 min' },
+  { id: 'railrunner', name: 'Rail Runner', emoji: '🚆', color: '#ff453a', desc: '3D endless runner — swipe or Crown' },
 ];
 
 // Hub filters. A game can appear in one category; CROWN marks games playable with the Digital Crown.
 window.CATEGORIES = {
   Arcade: ['snakeio', 'blobio', 'flappy', 'stack', 'dino', 'knife', 'colorswitch', 'invaders', 'fruit', 'dodge', 'cave', 'hop',
-    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase', 'cycles', 'tugofwar', 'rhythm', 'dash', 'helix', 'snakeblocks', 'pinball', 'twistit', 'burger', 'jetpack', 'bricksballs', 'bulletdodge', 'walljump', 'holeio', 'paperio', 'survivor'],
+    'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'orbit', 'balloons', 'whack', 'breakout', 'pong', 'snake', 'airhockey', 'timber', 'tiles', 'bubbles', 'lander', 'artillery', 'buggy', 'duckhunt', 'chase', 'cycles', 'tugofwar', 'rhythm', 'dash', 'helix', 'snakeblocks', 'pinball', 'twistit', 'burger', 'jetpack', 'bricksballs', 'bulletdodge', 'walljump', 'holeio', 'paperio', 'survivor', 'railrunner'],
   Puzzle: ['2048', 'blocks', 'mines', 'lightsout', 'fifteen', 'maze', 'hanoi', 'sudoku', 'sokoban', 'flood', 'codebreaker', 'nonogram', 'pipes', 'gems', 'ballsort', 'pegs', 'dropmerge', 'tiletrio', 'iceslide', 'fruitmerge', 'blockblast'],
   Brain: ['simon', 'memory', 'reaction', 'math', 'numbers', 'stop', 'stroop', 'chimp', 'scramble', 'hangman', 'safe', 'five', 'tenseconds', 'capitals', 'timestables', 'oddone', 'digitspan', 'wordsearch', 'memorygrid', 'flags'],
   Board: ['tictactoe', 'connect4', 'reversi', 'dots', 'mancala', 'battleship', 'nim', 'blackjack', 'hilo', 'pig', 'rps', 'golfsolitaire', 'checkers', 'dicepoker', 'gomoku'],
   Sports: ['golf', 'hoops', 'bowling', 'darts', 'penalty', 'homerun', 'papertoss', 'skeeball', 'slalom', 'keepyuppy', 'squash', 'dragrace', 'archery'],
   Fun: ['eightball', 'slots', 'cookie', 'plinko', 'pet', 'fishing', 'bubblewrap', 'pancake'],
 };
-window.CROWN = ['survivor', 'paperio', 'holeio', 'fruitmerge', 'archery', 'squash', 'bricksballs', 'burger', 'twistit', 'slalom', 'snakeblocks', 'helix', 'tugofwar', 'fishing', 'buggy', 'safe', 'artillery', 'lander', 'pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];
+window.CROWN = ['railrunner', 'survivor', 'paperio', 'holeio', 'fruitmerge', 'archery', 'squash', 'bricksballs', 'burger', 'twistit', 'slalom', 'snakeblocks', 'helix', 'tugofwar', 'fishing', 'buggy', 'safe', 'artillery', 'lander', 'pet', 'bubbles', 'snakeio', 'blobio', 'blocks', 'invaders', 'jumper', 'racer', 'asteroids', 'tunnel', 'catch', 'cookie', 'eightball', 'slots'];
