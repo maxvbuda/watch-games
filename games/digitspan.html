@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Digit Span</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #area { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 30px 6px max(6px, env(safe-area-inset-bottom)); gap: 4px; }
+    #show { text-align: center; font-size: 40px; font-weight: 800; height: 48px; font-variant-numeric: tabular-nums; }
+    #typed { text-align: center; font-size: 16px; font-weight: 700; color: #64d2ff; min-height: 20px; letter-spacing: 2px; }
+    #pad { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+    #pad button { border: 0; border-radius: 8px; background: #2c2c2e; color: #fff; font: inherit; font-size: 16px; font-weight: 700; }
+    #pad.off { opacity: 0.3; pointer-events: none; }
+  </style>
+</head>
+<body class="game">
+  <div id="area"><div id="show"></div><div id="typed"></div><div id="pad" class="off"></div></div>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    // Digits flash one at a time; type them back in order. Each success adds a digit.
+    const $ = id => document.getElementById(id);
+    let seq, typed, len, lives;
+    for (let d = 0; d <= 9; d++) {
+      const b = document.createElement('button');
+      b.textContent = (d + 1) % 10;
+      const go = e => { e.preventDefault(); press(b.textContent); };
+      b.addEventListener('touchstart', go, { passive: false });
+      b.addEventListener('mousedown', go);
+      $('pad').appendChild(b);
+    }
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    async function round() {
+      seq = Array.from({ length: len }, () => W.randInt(0, 9)).join('');
+      typed = ''; $('typed').textContent = ''; $('pad').className = 'off';
+      $('hud').innerHTML = `${len}<small>${'❤️'.repeat(lives)}</small>`;
+      await wait(500);
+      for (const ch of seq) { $('show').textContent = ch; await wait(650); $('show').textContent = ''; await wait(150); }
+      $('show').textContent = '?'; $('pad').className = '';
+    }
+    function press(d) {
+      typed += d; $('typed').textContent = typed;
+      if (!seq.startsWith(typed)) {
+        lives--; $('show').textContent = '✗'; $('typed').textContent = seq; $('pad').className = 'off';
+        if (lives <= 0) { const best = W.best('digitspan', len - 1); setTimeout(() => W.overlay({ title: 'Memory full! 🧠', big: len - 1, text: `digits · best ${best}`, button: 'Again', onStart: start }), 900); }
+        else setTimeout(round, 1200);
+      } else if (typed === seq) { $('show').textContent = '✓'; $('pad').className = 'off'; len++; setTimeout(round, 600); }
+    }
+    function start() { len = 3; lives = 3; round(); }
+    W.overlay({ title: '🔢 Digit Span', text: 'Remember the digits as they<br>flash, then type them back.<br>How long can you go?', onStart: start });
+  </script>
+</body>
+</html>
