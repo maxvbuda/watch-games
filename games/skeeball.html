@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Skee-Ball</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const BALLS = 9;
+    // Swipe up: swipe length sets how far up the ramp it rolls, sideways sets aim. Smaller, higher holes score more.
+    let ball, score, left, state = 'ready', msg = '', msgT = 0;
+    const holes = () => {
+      const w = view.w, h = view.h;
+      return [
+        { x: w * 0.5, y: h * 0.62, r: w * 0.3, pts: 10, ring: true }, { x: w * 0.5, y: h * 0.5, r: w * 0.08, pts: 20 },
+        { x: w * 0.5, y: h * 0.38, r: w * 0.07, pts: 30 }, { x: w * 0.5, y: h * 0.27, r: w * 0.06, pts: 40 },
+        { x: w * 0.5, y: h * 0.17, r: w * 0.055, pts: 50 }, { x: w * 0.16, y: h * 0.15, r: w * 0.05, pts: 100 }, { x: w * 0.84, y: h * 0.15, r: w * 0.05, pts: 100 },
+      ];
+    };
+    function updateHud() { hud.innerHTML = `${score}<small>${left} balls</small>`; }
+
+    function roll(dx, dy, ms) {
+      if (state !== 'play' || ball || dy > -20) return;
+      const power = W.clamp(-dy / (view.h * 0.55) * (180 / Math.max(90, ms)), 0.15, 1.3);
+      ball = { t: 0, x0: view.w / 2, y0: view.h * 0.92, tx: view.w / 2 + dx * 1.4, ty: view.h * (0.92 - power * 0.8), dur: 0.7 };
+      left--;
+    }
+    function update(dt) {
+      if (!ball) return;
+      ball.t += dt / ball.dur;
+      if (ball.t < 1) return;
+      // Land: score the smallest hole it falls into (centre holes beat the big ring).
+      const hit = holes().filter(o => Math.hypot(o.x - ball.tx, o.y - ball.ty) < o.r * (o.ring ? 1 : 0.9)).sort((a, b) => b.pts - a.pts)[0];
+      const pts = hit ? hit.pts : 0;
+      score += pts; msg = pts ? `+${pts}` : 'Gutter'; msgT = 0.8;
+      ball = null; updateHud();
+      if (left <= 0) { state = 'over'; const best = W.best('skeeball', score); setTimeout(() => W.overlay({ title: 'Game over 🎟️', big: score, text: `${Math.floor(score / 10)} tickets · best ${best}`, button: 'Again', onStart: start }), 600); }
+    }
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#2a1a0e'; ctx.fillRect(0, 0, w, h);
+      const ramp = ctx.createLinearGradient(0, h * 0.05, 0, h);
+      ramp.addColorStop(0, '#5c3a1e'); ramp.addColorStop(1, '#a0703c');
+      ctx.fillStyle = ramp; ctx.beginPath(); ctx.moveTo(w * 0.05, h * 0.05); ctx.lineTo(w * 0.95, h * 0.05); ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.fill();
+      for (const o of holes()) {
+        if (o.ring) { ctx.strokeStyle = '#ffd60a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(o.x, o.y, o.r, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke(); continue; }
+        ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = o.pts === 100 ? '#ff453a' : '#ffd60a'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.font = `700 ${Math.round(o.r * 0.7)}px -apple-system, system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(o.pts, o.x, o.y + o.r + 7);
+      }
+      const t = ball ? Math.min(ball.t, 1) : 0;
+      const bx = ball ? ball.x0 + (ball.tx - ball.x0) * t : w / 2, by = ball ? ball.y0 + (ball.ty - ball.y0) * t - Math.sin(Math.PI * Math.max(0, t - 0.6) / 0.4) * 12 : h * 0.92;
+      const br = w * (0.05 - 0.02 * t);
+      if (state === 'play' || ball) { ctx.fillStyle = '#e8e2d0'; ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#0003'; ctx.beginPath(); ctx.arc(bx + br * 0.3, by + br * 0.3, br * 0.7, 0, Math.PI * 2); ctx.fill(); }
+      if (msgT > 0) { msgT -= dt; ctx.globalAlpha = Math.min(1, msgT * 3); ctx.fillStyle = '#ffd60a'; ctx.font = '800 18px -apple-system, system-ui'; ctx.textAlign = 'center'; ctx.fillText(msg, w / 2, h * 0.75); ctx.globalAlpha = 1; }
+    }
+    let s0 = null, t0 = 0;
+    W.pointer(canvas, { down: p => { s0 = p; t0 = performance.now(); }, up: p => { if (s0) roll(p.x - s0.x, p.y - s0.y, performance.now() - t0); s0 = null; } });
+    function start() { score = 0; left = BALLS; ball = null; updateHud(); state = 'play'; }
+    score = 0; left = BALLS; updateHud();
+    W.overlay({ title: '🎟️ Skee-Ball', text: 'Swipe up to roll. Longer,<br>faster swipes roll farther.<br>Corner holes = 100!', onStart: start });
+    W.loop(dt => { if (state === 'play' || ball) update(dt); render(dt); });
+  </script>
+</body>
+</html>
