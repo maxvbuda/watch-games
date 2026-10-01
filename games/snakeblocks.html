@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Snake vs Blocks</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    const COLS = 5;
+    // The snake climbs automatically. Steer into weak blocks (each hit costs a ball) and grab +balls.
+    let x, tx, len, rows, scroll, score, state = 'ready', grind = 0, trail = [];
+    const BW = () => view.w / COLS, SY = () => view.h * 0.72;
+
+    function makeRow(y) {
+      const kind = W.rng() < 0.55 ? 'blocks' : 'balls';
+      if (kind === 'blocks') {
+        const cells = [];
+        const easy = W.randInt(0, COLS - 1);   // at least one cheap block so there's always a way
+        for (let c = 0; c < COLS; c++) if (W.rng() < 0.75 || c === easy) cells.push({ c, n: c === easy ? W.randInt(1, Math.max(1, Math.floor(len / 2))) : W.randInt(1, 6 + Math.floor(score / 15)) });
+        return { y, kind, cells };
+      }
+      return { y, kind, cells: [{ c: W.randInt(0, COLS - 1), n: W.randInt(1, 5) }] };
+    }
+    function reset() { x = tx = view.w / 2; len = 6; scroll = 0; score = 0; rows = []; for (let i = 1; i <= 6; i++) rows.push(makeRow(-i * view.h * 0.32)); trail = []; updateHud(); }
+    function updateHud() { hud.innerHTML = `${score}<small>🐍 ${len}</small>`; }
+
+    function update(dt) {
+      const speed = view.h * (0.42 + Math.min(score, 200) * 0.002);
+      x += (tx - x) * Math.min(1, dt * 14);
+      const col = W.clamp(Math.floor(x / BW()), 0, COLS - 1);
+      // Block directly ahead? Grind through it instead of moving.
+      let blocked = null;
+      for (const r of rows) {
+        const y = r.y + scroll;
+        if (r.kind !== 'blocks' || y < SY() - BW() || y > SY() - BW() * 0.4) continue;
+        blocked = r.cells.find(cl => cl.c === col && cl.n > 0) || null;
+        // Side walls: can't slide into a neighbouring block while level with it.
+        for (const cl of r.cells) if (cl.n > 0 && cl.c !== col) { const bx = cl.c * BW(); if (tx > x && bx > x && bx < x + BW() * 0.6) tx = x; if (tx < x && bx + BW() < x && bx + BW() > x - BW() * 0.6) tx = x; }
+      }
+      if (blocked) {
+        grind -= dt;
+        if (grind <= 0) { grind = 0.07; blocked.n--; len--; score++; updateHud(); if (len <= 0) return die(); }
+      } else scroll += speed * dt;
+      for (const r of rows) {
+        const y = r.y + scroll;
+        if (r.kind === 'balls') for (const cl of r.cells) if (cl.n > 0 && Math.abs(y - SY()) < BW() * 0.4 && cl.c === col) { len += cl.n; cl.n = 0; updateHud(); }
+      }
+      rows = rows.filter(r => r.y + scroll < view.h + 40);
+      while (rows.length < 7) rows.push(makeRow(Math.min(...rows.map(r => r.y)) - view.h * W.rand(0.28, 0.4)));
+      trail.unshift(x); trail.length = Math.min(trail.length, 60);
+    }
+    function die() {
+      state = 'over';
+      const best = W.best('snakeblocks', score);
+      setTimeout(() => W.overlay({ title: 'Out of snake!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 400);
+    }
+
+    function render() {
+      const { w, h } = view;
+      ctx.fillStyle = '#16161e'; ctx.fillRect(0, 0, w, h);
+      const bw = BW();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const r of rows) {
+        const y = r.y + scroll;
+        for (const cl of r.cells) {
+          if (cl.n <= 0) continue;
+          if (r.kind === 'blocks') {
+            ctx.fillStyle = `hsl(${Math.max(0, 140 - cl.n * 12)},75%,50%)`;
+            ctx.beginPath(); ctx.roundRect ? ctx.roundRect(cl.c * bw + 2, y - bw * 0.9, bw - 4, bw * 0.85, 6) : ctx.rect(cl.c * bw + 2, y - bw * 0.9, bw - 4, bw * 0.85); ctx.fill();
+            ctx.fillStyle = '#000'; ctx.font = `800 ${Math.round(bw * 0.38)}px -apple-system, system-ui`; ctx.fillText(cl.n, (cl.c + 0.5) * bw, y - bw * 0.47);
+          } else {
+            ctx.fillStyle = '#ffd60a'; ctx.beginPath(); ctx.arc((cl.c + 0.5) * bw, y, bw * 0.16, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = `700 ${Math.round(bw * 0.25)}px -apple-system, system-ui`; ctx.fillText('+' + cl.n, (cl.c + 0.5) * bw, y - bw * 0.32);
+          }
+        }
+      }
+      // Snake: a chain of balls trailing below the head.
+      const r = bw * 0.13;
+      for (let k = Math.min(len, 14) - 1; k >= 0; k--) {
+        ctx.fillStyle = k === 0 ? '#30d158' : '#28b24a';
+        ctx.beginPath(); ctx.arc(trail[Math.min(k * 3, trail.length - 1)] ?? x, SY() + k * r * 1.9, r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = '#fff'; ctx.font = `800 ${Math.round(bw * 0.28)}px -apple-system, system-ui`; ctx.fillText(len, x, SY() - r * 2.4);
+    }
+
+    const setTx = v => (tx = W.clamp(v, BW() * 0.3, view.w - BW() * 0.3));
+    W.pointer(canvas, { down: p => setTx(p.x), move: p => setTx(p.x) });
+    W.crown(d => { if (state === 'play') setTx(tx + d * 0.8); });
+    function start() { reset(); state = 'play'; }
+    reset();
+    W.overlay({ title: '🐍 Snake vs Blocks', text: 'Drag or turn the Crown.<br>Each block hit costs a ball;<br>grab +balls to grow!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(); });
+  </script>
+</body>
+</html>
