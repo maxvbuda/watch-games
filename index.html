@@ -6,7 +6,7 @@
   <meta name="disable-adaptations" content="watch">
   <meta name="theme-color" content="#000000">
   <title>Watch Games</title>
-  <link rel="stylesheet" href="css/watch.css">
+  <link rel="stylesheet" href="css/watch.css?v=1790817611">
 </head>
 <body>
   <main class="hub">
@@ -15,18 +15,17 @@
     <div class="chips" id="chips"></div>
     <nav class="list" id="list"></nav>
   </main>
-  <script src="js/common.js"></script>
-  <script src="js/games.js"></script>
-  <script src="js/packs.js"></script>
+  <script src="js/common.js?v=1790817611"></script>
+  <script src="js/games.js?v=1790817611"></script>
+  <script src="js/packs.js?v=1790817611"></script>
   <script>
     const list = document.getElementById('list');
     const chips = document.getElementById('chips');
     const FILTERS = ['All', '📦 Packs', '⌚ Crown', ...Object.keys(CATEGORIES)];
     const packList = Object.values(PACKS);
     const levelCount = packList.reduce((a, p) => a + p.count, 0);
+    // Always open on 'All' so a filter tapped earlier never hides games.
     let filter = 'All';
-    try { filter = localStorage.getItem('wg.filter') || 'All'; } catch (e) {}
-    if (!FILTERS.includes(filter)) filter = 'All';
 
     function matches(g) {
       if (filter === 'All') return true;
@@ -42,7 +41,6 @@
         b.textContent = f;
         b.addEventListener('click', () => {
           filter = f;
-          try { localStorage.setItem('wg.filter', f); } catch (e) {}
           render();
         });
         chips.appendChild(b);
