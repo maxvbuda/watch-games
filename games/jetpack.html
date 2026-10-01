@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Jetpack</title>
+  <link rel="stylesheet" href="../css/watch.css">
+</head>
+<body class="game">
+  <canvas id="c" class="full"></canvas>
+  <div class="hud" id="hud"></div>
+  <script src="../js/common.js"></script>
+  <script>
+    const canvas = document.getElementById('c');
+    const hud = document.getElementById('hud');
+    const view = W.setupCanvas(canvas);
+    const ctx = view.ctx;
+    // Hold to fire the jetpack. Grab coins, dodge the electric zappers.
+    let y, vy, zaps, coins, speed, dist, got, holding = false, state = 'ready', flames = [], t = 0;
+    const TOP = 30, FLOOR = () => view.h - 12, PX = () => view.w * 0.25;
+
+    function reset() { y = view.h * 0.6; vy = 0; zaps = []; coins = []; speed = view.w * 0.7; dist = 0; got = 0; spawn(view.w + 40); updateHud(); }
+    function spawn(x0) {
+      let x = x0;
+      for (let k = 0; k < 4; k++) {
+        x += view.w * W.rand(0.55, 0.8);
+        const len = view.h * W.rand(0.2, 0.38), a = W.pick([0, Math.PI / 2, Math.PI / 4, -Math.PI / 4]);
+        zaps.push({ x, y: W.rand(TOP + len / 2, FLOOR() - len / 2), len, a });
+        const cy = W.rand(TOP + 20, FLOOR() - 20);
+        for (let i = 0; i < 5; i++) coins.push({ x: x + view.w * 0.3 + i * 12, y: cy + Math.sin(i) * 8 });
+      }
+    }
+    function updateHud() { hud.innerHTML = `${Math.floor(dist / 20)}m<small>🪙 ${got}</small>`; }
+
+    function segDist(px, py, z) {
+      const dx = Math.cos(z.a) * z.len / 2, dy = Math.sin(z.a) * z.len / 2;
+      const x1 = z.x - dx, y1 = z.y - dy, x2 = z.x + dx, y2 = z.y + dy, l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+      const u = W.clamp(((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2, 0, 1);
+      return Math.hypot(px - (x1 + u * (x2 - x1)), py - (y1 + u * (y2 - y1)));
+    }
+    function update(dt) {
+      t += dt;
+      speed += view.w * 0.012 * dt;
+      dist += speed * dt;
+      vy += (holding ? -view.h * 2.6 : view.h * 2.2) * dt;
+      vy = W.clamp(vy, -view.h * 1.1, view.h * 1.2);
+      y += vy * dt;
+      if (y < TOP + 8) { y = TOP + 8; vy = 0; }
+      if (y > FLOOR() - 8) { y = FLOOR() - 8; vy = 0; }
+      for (const z of zaps) z.x -= speed * dt;
+      for (const c of coins) c.x -= speed * dt;
+      for (const c of coins) if (!c.got && Math.hypot(c.x - PX(), c.y - y) < 12) { c.got = true; got++; }
+      if (zaps.some(z => segDist(PX(), y, z) < 9)) {
+        state = 'over';
+        const sc = Math.floor(dist / 20) + got * 5, best = W.best('jetpack', sc);
+        setTimeout(() => W.overlay({ title: 'Zapped! ⚡', big: sc, text: `${Math.floor(dist / 20)}m + ${got} coins×5 · best ${best}`, button: 'Again', onStart: start }), 500);
+      }
+      zaps = zaps.filter(z => z.x > -view.w * 0.5); coins = coins.filter(c => c.x > -20 && !c.got);
+      if (Math.max(...zaps.map(z => z.x)) < view.w * 1.4) spawn(Math.max(...zaps.map(z => z.x)));
+      if (holding) flames.push({ x: PX() - 6, y: y + 9, vy: W.rand(60, 120), t: 0.25 });
+      updateHud();
+    }
+
+    function render(dt) {
+      const { w, h } = view;
+      ctx.fillStyle = '#1b1f2e'; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#262b40';
+      for (let k = 0; k < 8; k++) { const x = ((k * 60 - dist * 0.4) % (w + 60) + w + 60) % (w + 60) - 30; ctx.fillRect(x, TOP, 22, h); }
+      ctx.fillStyle = '#3a3f58'; ctx.fillRect(0, FLOOR(), w, h); ctx.fillRect(0, 0, w, TOP);
+      for (const z of zaps) {
+        const dx = Math.cos(z.a) * z.len / 2, dy = Math.sin(z.a) * z.len / 2;
+        ctx.strokeStyle = '#ffd60a'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(z.x - dx, z.y - dy);
+        for (let i = 1; i <= 8; i++) { const u = i / 8; ctx.lineTo(z.x - dx + 2 * dx * u + W.rand(-3, 3), z.y - dy + 2 * dy * u + W.rand(-3, 3)); }
+        ctx.stroke();
+        ctx.fillStyle = '#8e8e93'; for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(z.x + dx * s, z.y + dy * s, 5, 0, Math.PI * 2); ctx.fill(); }
+      }
+      for (const c of coins) { ctx.fillStyle = '#ffd60a'; ctx.beginPath(); ctx.ellipse(c.x, c.y, 4 * Math.abs(Math.sin(t * 5 + c.x * 0.1)) + 1, 5, 0, 0, Math.PI * 2); ctx.fill(); }
+      for (const f of flames) { f.t -= dt; f.y += f.vy * dt; ctx.fillStyle = `rgba(255,${120 + Math.random() * 100},0,${Math.max(0, f.t * 4)})`; ctx.fillRect(f.x - 2, f.y, 4, 4); }
+      flames = flames.filter(f => f.t > 0);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.font = '20px sans-serif';
+      ctx.save(); ctx.translate(PX(), y); ctx.scale(-1, 1); ctx.fillText(state === 'over' ? '😵' : '🧑‍🚀', 0, 0); ctx.restore();
+    }
+
+    W.pointer(canvas, { down: () => (holding = true), up: () => (holding = false) });
+    window.addEventListener('keydown', e => { if (e.key === ' ') holding = true; });
+    window.addEventListener('keyup', e => { if (e.key === ' ') holding = false; });
+    function start() { reset(); holding = false; state = 'play'; }
+    reset();
+    W.overlay({ title: '🧑‍🚀 Jetpack', text: 'Hold to fly up, let go to<br>drop. Grab 🪙, dodge the ⚡!', onStart: start });
+    W.loop(dt => { if (state === 'play') update(dt); render(dt); });
+  </script>
+</body>
+</html>
