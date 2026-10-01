@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="disable-adaptations" content="watch">
+  <title>Twist It!</title>
+  <link rel="stylesheet" href="../css/watch.css">
+  <style>
+    #pad { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; transition: background 0.15s; }
+    #cmd { font-size: 30px; font-weight: 900; text-align: center; }
+    #icon { font-size: 44px; line-height: 1; }
+    #ring { position: absolute; inset: 6px; border-radius: 40px; border: 4px solid #ffffff33; pointer-events: none; }
+  </style>
+</head>
+<body class="game">
+  <div id="pad"><div id="icon"></div><div id="cmd"></div></div>
+  <div id="ring"></div>
+  <div class="hud" id="hud">0</div>
+  <script src="../js/common.js"></script>
+  <script>
+    // Do what it says, before time runs out: TAP it, SWIPE it, or TWIST it (the Digital Crown)!
+    const CMDS = [
+      { k: 'tap', t: 'TAP IT!', i: '👆', c: '#0a84ff' },
+      { k: 'swipe', t: 'SWIPE IT!', i: '👉', c: '#30d158' },
+      { k: 'twist', t: 'TWIST IT!', i: '⌚', c: '#ff9f0a' },
+      { k: 'hold', t: 'HOLD IT!', i: '✋', c: '#bf5af2' },
+    ];
+    const $ = id => document.getElementById(id);
+    let cmd, limit, left, score, playing = false, holdT = 0, holding = false, twistAcc = 0, sx = 0, sy = 0, moved = false, audio;
+    function beep(f) { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); const o = audio.createOscillator(), g = audio.createGain(); o.frequency.value = f; g.gain.setValueAtTime(0.15, audio.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.15); o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + 0.15); } catch (e) {} }
+    function next() {
+      cmd = W.pick(CMDS); limit = Math.max(0.9, 2.2 - score * 0.05); left = limit; holdT = 0; twistAcc = 0;
+      $('cmd').textContent = cmd.t; $('icon').textContent = cmd.i; $('pad').style.background = cmd.c + '33';
+    }
+    function done(kind) {
+      if (!playing) return;
+      if (kind !== cmd.k) return fail();
+      score++; $('hud').textContent = score; beep(600 + score * 20); next();
+    }
+    function fail() {
+      playing = false; beep(120);
+      $('pad').style.background = '#ff453a55';
+      const best = W.best('twistit', score);
+      setTimeout(() => W.overlay({ title: 'Wrong move!', big: score, text: `Best ${best}`, button: 'Again', onStart: start }), 300);
+    }
+    const pad = $('pad');
+    pad.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; sx = t.clientX; sy = t.clientY; moved = false; holding = true; }, { passive: false });
+    pad.addEventListener('touchmove', e => { e.preventDefault(); const t = e.touches[0]; if (!moved && Math.hypot(t.clientX - sx, t.clientY - sy) > 20) { moved = true; holding = false; done('swipe'); } }, { passive: false });
+    pad.addEventListener('touchend', e => { e.preventDefault(); if (!moved && holding && holdT < 0.4) done('tap'); holding = false; holdT = 0; }, { passive: false });
+    pad.addEventListener('mousedown', e => { sx = e.clientX; sy = e.clientY; moved = false; holding = true; });
+    window.addEventListener('mousemove', e => { if (holding && !moved && Math.hypot(e.clientX - sx, e.clientY - sy) > 20) { moved = true; holding = false; done('swipe'); } });
+    window.addEventListener('mouseup', () => { if (holding && !moved && holdT < 0.4) done('tap'); holding = false; holdT = 0; });
+    W.crown(d => { if (!playing) return; twistAcc += Math.abs(d); if (twistAcc > 60) { twistAcc = 0; done('twist'); } });
+    window.addEventListener('keydown', e => { const m = { t: 'tap', s: 'swipe', c: 'twist', h: 'hold' }[e.key]; if (m) done(m); });
+    W.loop(dt => {
+      if (!playing) return;
+      if (holding) { holdT += dt; if (holdT > 0.8) { holding = false; holdT = 0; done('hold'); } }
+      left -= dt;
+      $('ring').style.borderColor = left / limit < 0.3 ? '#ff453a' : '#ffffff55';
+      $('ring').style.opacity = 0.3 + left / limit * 0.7;
+      if (left <= 0) fail();
+    });
+    function start() { score = 0; $('hud').textContent = '0'; playing = true; next(); }
+    W.overlay({ title: '⌚ Twist It!', text: 'TAP it, SWIPE it, HOLD it,<br>or TWIST the Crown — fast!<br>It keeps speeding up.', onStart: start });
+  </script>
+</body>
+</html>
